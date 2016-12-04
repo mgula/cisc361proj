@@ -12,6 +12,8 @@
  * Can we assume the times of the commands will be from least to greatest?
  * "under no circumstance should you pre process the file"
  * new struct for processes?
+ * what should the output actually be?
+ * final report?
  */
 
 #include <iostream>
@@ -65,33 +67,32 @@ int main () {
 
 		/*Update time of the current input, unless current input is a status display*/
 		if (current[0] == 'D') {
-			//System status display
 			statusDisplay(current);
-			inputNumber++;
+			inputCompleted = true;
 		} else if (current[0] == 'C' || current[0] == 'A' || current[0] == 'Q' || current[0] == 'L') {
-
 			char parsed[current.length()];
-			strcpy(parsed, current.c_str());
+			strcpy(parsed, current.c_str()); //convert string to char array
 			char * temp;
-			temp = strtok(parsed, " ");
+			temp = strtok(parsed, " "); //split string with space as delimiter
 			int i = 0;
 			currentInputTime = 0;
 			while (i != 2) {
-				if (i == 1) {
-					for (int j = 0; j < strlen(temp); j++) {
+				if (i == 1) { //we know the second char cluster in temp must be the time
+					for (int j = 0; j < strlen(temp); j++) { //translate char to int
 						currentInputTime += pow(10, strlen(temp) - j - 1) * (temp[j] - '0');
 					}
 				}
-				temp = strtok (NULL, " ");
+				temp = strtok(NULL, " ");
 				i++;
 			}
 		}
 
+		/*Make sure to only process the current input once*/
 		if (!inputCompleted) {
 			readCommand(current);
 			inputCompleted = true;
 		}
-
+		/*Move on to next command if current command has been processed*/
 		if (realTime >= currentInputTime && inputCompleted) {
 			inputNumber++;
 			inputCompleted = false;
@@ -101,9 +102,14 @@ int main () {
 
 
 
+
+
+
+
 		realTime++;
 	}
 
+	cout << memory << " " << devices << " " << quantum << endl;
 	cout << "end";
 	return 1;
 }
@@ -127,19 +133,45 @@ void readCommand(string input) {
 void configureSystem(string input) {
 	char parsed[input.length()];
 	strcpy(parsed, input.c_str());
-	bool space;
-	for (int i = 0; i < input.length(); i++) {
-		if (i == 0 || i == 1) {
-			continue;
-		} else {
-
+	char * temp;
+	temp = strtok(parsed, " ");
+	while (temp != NULL) {
+		if (temp[0] == 'M') {
+			memory = 0;
+			int i = strlen(temp) - 1;
+			int j = 0;
+			while (temp[i] != '=') {
+				memory += pow(10, j) * (temp[i] - '0');
+				j++;
+				i--;
+			}
+		} else if (temp[0] == 'S') {
+			devices = 0;
+			int i = strlen(temp) - 1;
+			int j = 0;
+			while (temp[i] != '=') {
+				devices += pow(10, j) * (temp[i] - '0');
+				j++;
+				i--;
+			}
+		} else if (temp[0] == 'Q') {
+			quantum = 0;
+			int i = strlen(temp) - 1;
+			int j = 0;
+			while (temp[i] != '=') {
+				quantum += pow(10, j) * (temp[i] - '0');
+				j++;
+				i--;
+			}
 		}
+		temp = strtok (NULL, " ");
 	}
 }
 
 void statusDisplay(string input) {
-	if (input == "D 9999 ") {
+	if (input == "D 9999 " || input == "D 9999") {
 		simulating = false;
+
 	}
 	char parsed[input.length()];
 	strcpy(parsed, input.c_str());
