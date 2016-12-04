@@ -69,35 +69,22 @@ int main () {
 			statusDisplay(current);
 			inputNumber++;
 		} else if (current[0] == 'C' || current[0] == 'A' || current[0] == 'Q' || current[0] == 'L') {
-			char temp[4] = {'a', 'a', 'a', 'a'}; //assume time of first input will be <9999
-			int i = 2; //start at character 3 of the string
-			while (current[i] != ' ') {
-				temp[i - 2] = current[i];
-				i++;
-			}
-			int valid = i - 2;
-			currentInputTime = 0;
-			i = 0;
-			while (temp[i] != 'a') {
-				currentInputTime += (pow(10, valid - i - 1)) * (temp[i] - '0');
-				i++;
-			}
 
-			/*
 			char parsed[current.length()];
 			strcpy(parsed, current.c_str());
 			char * temp;
 			temp = strtok(parsed, " ");
-			currentInputTime = 0;
 			int i = 0;
-			while (temp != NULL) {
+			currentInputTime = 0;
+			while (i != 2) {
 				if (i == 1) {
-					//this doesnt work after temp is more than 1 character long
-					currentInputTime = *temp - '0';
+					for (int j = 0; j < strlen(temp); j++) {
+						currentInputTime += pow(10, strlen(temp) - j - 1) * (temp[j] - '0');
+					}
 				}
-				temp = strtok (NULL, " ,.-");
+				temp = strtok (NULL, " ");
 				i++;
-			}*/
+			}
 		}
 
 		if (!inputCompleted) {
