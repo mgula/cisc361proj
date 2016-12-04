@@ -14,6 +14,8 @@
  * new struct for processes?
  * what should the output actually be?
  * final report?
+ * numeric constants?
+ * two jobs arriving at same time?
  */
 
 #include <iostream>
