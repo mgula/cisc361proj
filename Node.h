@@ -20,19 +20,27 @@ struct Node {
 	struct Node *next;
 	int listSize;
 
+	string status;
 	int arrivalTime;
 	int completionTime;
+
+	int turnaroundTime;
+
 	int jobNumber;
 	int jobPriority;
 	int runTime;
+	int remainingTime;
 	int jobMemory;
 	int jobDevices;
+	int jobDevicesRequested;
 };
 
+void printSystem(Node *x);
 void traverseAndPrint(Node *x);
 void insert(Node *x, Node *y, Node *z);
-void add(Node *x, Node *y);
+void addToFront(Node *x, Node *y);
 void addToEnd(Node *x, Node *y);
+Node *remove(Node *x, int i);
 
 void testPrint(Node *x);
 
