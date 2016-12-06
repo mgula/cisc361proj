@@ -5,20 +5,17 @@
  *      Author: marcusgula
  *
  * This program assumes there is ALWAYS a space after each integer. Problems may arise if
- * the text file contains a line that doesn't end in a space.\
+ * the text file contains a line that doesn't end in a space.
  *
  *
  * Questions for TA:
- * Can we assume the times of the commands will be from least to greatest?
- * "under no circumstance should you pre process the file"
- * new struct for processes?
+ * Struct or class?
  * what should the output actually be?
- * final report?
  * numeric constants?
- * two jobs arriving at same time?
  */
 
 #include <iostream>
+#include <stdlib.h>
 #include <fstream>
 #include <string>
 #include <cmath>
@@ -35,13 +32,17 @@ bool inputCompleted = false;
 int currentInputTime;
 int numberOfInputs;
 
-int memory;
-int devices;
-int quantum;
+int memory = 0;
+int devices = 0;
+int quantum = 0;
 
-void readCommand(string input);
+
+void readCommand(string input, Node *submitQueue);
 void statusDisplay(string input);
-void configureSystem(string input);
+void configureSystem(char *str);
+void createJob(char *str, Node *submitQueue);
+
+int extractFromString(char *str);
 
 int main () {
 
@@ -61,6 +62,31 @@ int main () {
 		cout << "Unable to open selected file.";
 		return 0;
 	}
+
+	/*Create necessary queues*/
+	Node *submitQueue = new Node;
+	submitQueue->head = true;
+	submitQueue->next = NULL;
+
+	Node *holdQueue1 = new Node;
+	holdQueue1->head = true;
+	holdQueue1->next = NULL;
+
+	Node *holdQueue2 = new Node;
+	holdQueue2->head = true;
+	holdQueue2->next = NULL;
+
+	Node *readyQueue = new Node;
+	readyQueue->head = true;
+	readyQueue->next = NULL;
+
+	Node *waitQueue = new Node;
+	waitQueue->head = true;
+	waitQueue->next = NULL;
+
+	Node *completeQueue = new Node;
+	completeQueue->head = true;
+	completeQueue->next = NULL;
 
 	/*Begin simulation of system*/
 	while (simulating) {
@@ -91,17 +117,18 @@ int main () {
 
 		/*Make sure to only process the current input once*/
 		if (!inputCompleted) {
-			readCommand(current);
+			readCommand(current, submitQueue);
 			inputCompleted = true;
 		}
+
 		/*Move on to next command if current command has been processed*/
 		if (realTime >= currentInputTime && inputCompleted) {
 			inputNumber++;
 			inputCompleted = false;
 		}
-
 		cout << realTime << " " << currentInputTime << endl;
 
+		/*Perform queue maintenance*/
 
 
 
@@ -112,17 +139,24 @@ int main () {
 	}
 
 	cout << memory << " " << devices << " " << quantum << endl;
-	cout << "end";
+	traverseAndPrint(submitQueue);
 	return 1;
 }
 
-void readCommand(string input) {
+void readCommand(string input, Node *submitQueue) {
+	//Convert the string to a char array and split (space as delimiter)
+	char parsed[input.length()];
+	strcpy(parsed, input.c_str());
+	char *str;
+	str = strtok(parsed, " ");
+
 	//Pass the current input to appropriate method
 	if (input[0] == 'C') {
 		//System configuration
-		configureSystem(input);
+		configureSystem(str);
 	} else if (input[0] == 'A') {
 		//Arrival of a job
+		createJob(str, submitQueue);
 	} else if (input[0] == 'Q') {
 		//A request for devices
 	} else if (input[0] == 'L') {
@@ -132,49 +166,61 @@ void readCommand(string input) {
 	}
 }
 
-void configureSystem(string input) {
-	char parsed[input.length()];
-	strcpy(parsed, input.c_str());
-	char * temp;
-	temp = strtok(parsed, " ");
-	while (temp != NULL) {
-		if (temp[0] == 'M') {
-			memory = 0;
-			int i = strlen(temp) - 1;
-			int j = 0;
-			while (temp[i] != '=') {
-				memory += pow(10, j) * (temp[i] - '0');
-				j++;
-				i--;
-			}
-		} else if (temp[0] == 'S') {
-			devices = 0;
-			int i = strlen(temp) - 1;
-			int j = 0;
-			while (temp[i] != '=') {
-				devices += pow(10, j) * (temp[i] - '0');
-				j++;
-				i--;
-			}
-		} else if (temp[0] == 'Q') {
-			quantum = 0;
-			int i = strlen(temp) - 1;
-			int j = 0;
-			while (temp[i] != '=') {
-				quantum += pow(10, j) * (temp[i] - '0');
-				j++;
-				i--;
-			}
-		}
-		temp = strtok (NULL, " ");
-	}
-}
-
 void statusDisplay(string input) {
 	if (input == "D 9999 " || input == "D 9999") {
 		simulating = false;
-
 	}
 	char parsed[input.length()];
 	strcpy(parsed, input.c_str());
+}
+
+void configureSystem(char *str) {
+	while (str != NULL) {
+		if (str[0] == 'M') {
+			memory = extractFromString(str);
+		} else if (str[0] == 'S') {
+			devices = extractFromString(str);
+		} else if (str[0] == 'Q') {
+			quantum = extractFromString(str);
+		} else {
+			//Unrecognized input
+		}
+		str = strtok (NULL, " ");
+	}
+}
+
+void createJob(char *str, Node *submitQueue) {
+	Node *job = new Node;
+	job->head = false;
+	job->arrivalTime = currentInputTime;
+
+	while (str != NULL) {
+		if (str[0] == 'J') {
+			job->jobNumber = extractFromString(str);
+		} else if (str[0] == 'M') {
+			job->jobMemory = extractFromString(str);
+		} else if (str[0] == 'S') {
+			job->jobDevices = extractFromString(str);
+		} else if (str[0] == 'R') {
+			job->runTime = extractFromString(str);
+		} else if (str[0] == 'P') {
+			job->jobPriority = extractFromString(str);
+		} else {
+			//Unrecognized input
+		}
+		str = strtok (NULL, " ");
+	}
+	add(submitQueue, job);
+}
+
+int extractFromString(char *str) {
+	int x = 0;
+	int i = strlen(str) - 1;
+	int j = 0;
+	while (str[i] != '=') {
+		x += pow(10, j) * (str[i] - '0');
+		j++;
+		i--;
+	}
+	return x;
 }

@@ -11,10 +11,12 @@
 
 using namespace std;
 
-void traverse(Node *list) {
+void traverseAndPrint(Node *list) {
 	Node *temp = list;
 	while (temp != NULL) {
-		cout << temp->data << endl;
+		if (temp->head == false) {
+			cout << temp->arrivalTime << " " << temp->jobNumber << " " << temp->jobMemory << " " << temp->jobDevices << " " << temp->runTime << " " << temp->jobPriority << endl;
+		}
 		temp = temp->next;
 	}
 	cout << endl;
@@ -23,6 +25,13 @@ void traverse(Node *list) {
 void insert(Node *first, Node *second, Node *newNode) {
 	first->next = newNode;
 	newNode->next = second;
+}
+
+void add(Node *list, Node *addition) {
+	Node *temp = new Node;
+	temp->next = list->next;
+	list->next = addition;
+	addition->next = temp->next;
 }
 
 
