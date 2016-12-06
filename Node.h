@@ -17,6 +17,9 @@ using namespace std;
 
 struct Node {
 	bool head;
+	struct Node *next;
+	int listSize;
+
 	int arrivalTime;
 	int completionTime;
 	int jobNumber;
@@ -24,11 +27,13 @@ struct Node {
 	int runTime;
 	int jobMemory;
 	int jobDevices;
-	struct Node *next;
 };
 
 void traverseAndPrint(Node *x);
 void insert(Node *x, Node *y, Node *z);
 void add(Node *x, Node *y);
+void addToEnd(Node *x, Node *y);
+
+void testPrint(Node *x);
 
 #endif /* NODE_H_ */

@@ -37,10 +37,10 @@ int devices = 0;
 int quantum = 0;
 
 
-void readCommand(string input, Node *submitQueue);
-void statusDisplay(string input);
+void readCommand(string input, Node *sys, Node *submit);
+void statusDisplay(string input, Node *sys, Node *submit, Node *hold1, Node *hold2, Node *ready, Node *wait, Node *complete);
 void configureSystem(char *str);
-void createJob(char *str, Node *submitQueue);
+void createJob(char *str, Node *sys, Node *submit);
 
 int extractFromString(char *str);
 
@@ -64,28 +64,39 @@ int main () {
 	}
 
 	/*Create necessary queues*/
+	Node *system = new Node;
+	system->head = true;
+	system->listSize = 1;
+	system->next = NULL;
+
 	Node *submitQueue = new Node;
 	submitQueue->head = true;
+	submitQueue->listSize = 1;
 	submitQueue->next = NULL;
 
 	Node *holdQueue1 = new Node;
 	holdQueue1->head = true;
+	holdQueue1->listSize = 1;
 	holdQueue1->next = NULL;
 
 	Node *holdQueue2 = new Node;
 	holdQueue2->head = true;
+	holdQueue2->listSize = 1;
 	holdQueue2->next = NULL;
 
 	Node *readyQueue = new Node;
 	readyQueue->head = true;
+	readyQueue->listSize = 1;
 	readyQueue->next = NULL;
 
 	Node *waitQueue = new Node;
 	waitQueue->head = true;
+	waitQueue->listSize = 1;
 	waitQueue->next = NULL;
 
 	Node *completeQueue = new Node;
 	completeQueue->head = true;
+	completeQueue->listSize = 1;
 	completeQueue->next = NULL;
 
 	/*Begin simulation of system*/
@@ -95,7 +106,7 @@ int main () {
 
 		/*Update time of the current input, unless current input is a status display*/
 		if (current[0] == 'D') {
-			statusDisplay(current);
+			statusDisplay(current, system, submitQueue, holdQueue1, holdQueue2, readyQueue, waitQueue, completeQueue);
 			inputCompleted = true;
 		} else if (current[0] == 'C' || current[0] == 'A' || current[0] == 'Q' || current[0] == 'L') {
 			char parsed[current.length()];
@@ -117,7 +128,7 @@ int main () {
 
 		/*Make sure to only process the current input once*/
 		if (!inputCompleted) {
-			readCommand(current, submitQueue);
+			readCommand(current, system, submitQueue);
 			inputCompleted = true;
 		}
 
@@ -139,11 +150,11 @@ int main () {
 	}
 
 	cout << memory << " " << devices << " " << quantum << endl;
-	traverseAndPrint(submitQueue);
+	testPrint(submitQueue);
 	return 1;
 }
 
-void readCommand(string input, Node *submitQueue) {
+void readCommand(string input, Node *sys, Node *submit) {
 	//Convert the string to a char array and split (space as delimiter)
 	char parsed[input.length()];
 	strcpy(parsed, input.c_str());
@@ -156,7 +167,7 @@ void readCommand(string input, Node *submitQueue) {
 		configureSystem(str);
 	} else if (input[0] == 'A') {
 		//Arrival of a job
-		createJob(str, submitQueue);
+		createJob(str, sys, submit);
 	} else if (input[0] == 'Q') {
 		//A request for devices
 	} else if (input[0] == 'L') {
@@ -166,12 +177,26 @@ void readCommand(string input, Node *submitQueue) {
 	}
 }
 
-void statusDisplay(string input) {
+void statusDisplay(string input, Node *sys, Node *submit, Node *hold1, Node *hold2, Node *ready, Node *wait, Node *complete) {
 	if (input == "D 9999 " || input == "D 9999") {
 		simulating = false;
+		//Print system turnaround times
 	}
-	char parsed[input.length()];
-	strcpy(parsed, input.c_str());
+	cout << "System history: " << endl;
+	traverseAndPrint(sys);
+	cout << endl << "Submit Queue contents: " << endl;
+	traverseAndPrint(submit);
+	cout << endl << "Hold Queue 1 contents: " << endl;
+	traverseAndPrint(hold1);
+	cout << endl << "Hold Queue 2 contents: " << endl;
+	traverseAndPrint(hold2);
+	cout << endl << "Ready Queue contents: " << endl;
+	traverseAndPrint(ready);
+	cout << endl << "Wait Queue contents: " << endl;
+	traverseAndPrint(wait);
+	cout << endl << "Complete Queue contents: " << endl;
+	traverseAndPrint(complete);
+	cout << endl;
 }
 
 void configureSystem(char *str) {
@@ -189,10 +214,11 @@ void configureSystem(char *str) {
 	}
 }
 
-void createJob(char *str, Node *submitQueue) {
+void createJob(char *str, Node *sys, Node *submit) {
 	Node *job = new Node;
 	job->head = false;
 	job->arrivalTime = currentInputTime;
+	job->next = NULL;
 
 	while (str != NULL) {
 		if (str[0] == 'J') {
@@ -210,7 +236,11 @@ void createJob(char *str, Node *submitQueue) {
 		}
 		str = strtok (NULL, " ");
 	}
-	add(submitQueue, job);
+	add(submit, job);
+
+	Node *copy = new Node;
+	//try duplicating job
+	addToEnd(sys, copy);
 }
 
 int extractFromString(char *str) {
