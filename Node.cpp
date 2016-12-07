@@ -110,7 +110,3 @@ Node *remove(Node *head, int selectedJob){
 
 	return NULL; //Can't find node
 }
-
-
-
-

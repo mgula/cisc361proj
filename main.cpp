@@ -50,6 +50,8 @@ int devices = 0;
 int currentDevices = 0;
 int quantum = 0;
 int quantumSlice = 0;
+bool CPURunning = false;
+bool inputDone = false;
 
 
 void readCommand(string input, Node *sys, Node *submit);
@@ -121,28 +123,33 @@ int main () {
 		if (current[current.length() - 1] != ' ') {
 			cout << "Line not ending with a space (line " << inputNumber + 1 << ") - command ignored." << endl;
 			inputNumber++;
+			if (inputNumber >= numberOfInputs) {
+				inputDone = true;
+			}
 			continue;
 		}
 
 		/*Update time of the current input, unless current input is a status display*/
-		if (current[0] == 'D') {
-			statusDisplay(current, system, submitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, waitQueue, completeQueue);
-			inputCompleted = true;
-		} else if (current[0] == 'C' || current[0] == 'A' || current[0] == 'Q' || current[0] == 'L') {
-			char parsed[current.length()];
-			std::strcpy(parsed, current.c_str()); //Convert string to char array - type out std:: just to be safe
-			char * temp;
-			temp = std::strtok(parsed, " "); //Split string with space as delimiter
-			int i = 0;
-			currentInputTime = 0;
-			while (i != 2) {
-				if (i == 1) { //We know the second char cluster in temp must be the time
-					for (int j = 0; j < std::strlen(temp); j++) { //translate char to int
-						currentInputTime += pow(10, std::strlen(temp) - j - 1) * (temp[j] - '0');
+		if(!inputDone) {
+			if (current[0] == 'D') {
+				statusDisplay(current, system, submitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, waitQueue, completeQueue);
+				inputCompleted = true;
+			} else if (current[0] == 'C' || current[0] == 'A' || current[0] == 'Q' || current[0] == 'L') {
+				char parsed[current.length()];
+				std::strcpy(parsed, current.c_str()); //Convert string to char array - type out std:: just to be safe
+				char * temp;
+				temp = std::strtok(parsed, " "); //Split string with space as delimiter
+				int i = 0;
+				currentInputTime = 0;
+				while (i != 2) {
+					if (i == 1) { //We know the second char cluster in temp must be the time
+						for (int j = 0; j < std::strlen(temp); j++) { //translate char to int
+							currentInputTime += pow(10, std::strlen(temp) - j - 1) * (temp[j] - '0');
+						}
 					}
+					temp = std::strtok(NULL, " ");
+					i++;
 				}
-				temp = std::strtok(NULL, " ");
-				i++;
 			}
 		}
 
@@ -154,8 +161,10 @@ int main () {
 
 		/*Move on to next command if current command has been processed*/
 		if (realTime >= currentInputTime && inputCompleted) {
-			inputNumber++;
-			inputCompleted = false;
+			if (inputNumber < numberOfInputs - 1) {
+				inputNumber++;
+				inputCompleted = false;
+			}
 		}
 
 		/*Perform submit queue maintenance*/
@@ -179,8 +188,7 @@ int main () {
 							/*Update system status*/
 							updateSystem(system, transfer, HOLD_QUEUE_1);
 						} else if (transfer->jobPriority == 2) {
-							addToFront(holdQueue2, transfer);
-
+								addToFront(holdQueue2, transfer);
 							/*Update system status*/
 							updateSystem(system, transfer, HOLD_QUEUE_2);
 						}
@@ -244,6 +252,7 @@ int main () {
 				Node *transfer = remove(readyQueue, readyQueue->next->jobNumber);
 				addToFront(runningQueue, transfer);
 				quantumSlice = 0; //Reset quantum time
+				CPURunning = true;
 
 				/*Update system status*/
 				updateSystem(system, transfer, RUNNING);
@@ -253,45 +262,71 @@ int main () {
 
 		/*Perform running queue maintenance*/
 		if (runningQueue->next != NULL) {
-			runningQueue->next->remainingTime--;
-			quantumSlice++;
+			CPURunning = true;
 			if (runningQueue->next->remainingTime == 0) {
+				quantumSlice = 0;
 				runningQueue->next->turnaroundTime = realTime - runningQueue->next->arrivalTime;
+				if (readyQueue->next != NULL) {
+					Node *firstTransfer = remove(runningQueue, runningQueue->next->jobNumber);
+					Node *secondTransfer = remove(readyQueue, readyQueue->next->jobNumber);
+					addToEnd(completeQueue, firstTransfer);
+					addToEnd(runningQueue, secondTransfer);
 
-				Node *firstTransfer = remove(runningQueue, runningQueue->next->jobNumber);
-				Node *secondTransfer = remove(readyQueue, readyQueue->next->jobNumber);
-				addToEnd(completeQueue, firstTransfer);
-				addToFront(runningQueue, secondTransfer);
+					//Update system status
+					updateSystem(system, firstTransfer, COMPLETED);
+					updateSystem(system, secondTransfer, RUNNING);
+				} else {
+					CPURunning = false;
+					Node *transfer = remove(runningQueue, runningQueue->next->jobNumber);
+					addToEnd(completeQueue, transfer);
 
-				/*Update system status*/
-				updateSystem(system, firstTransfer, COMPLETED);
-				updateSystem(system, secondTransfer, RUNNING);
+					//Update system status
+					updateSystem(system, transfer, COMPLETED);
+				}
+			} else if (quantumSlice == quantum) {
+				quantumSlice = 0;
+				if (readyQueue->next != NULL) {
+					Node *firstTransfer = remove(runningQueue, runningQueue->next->jobNumber);
+					Node *secondTransfer = remove(readyQueue, readyQueue->next->jobNumber);
+					addToEnd(readyQueue, firstTransfer);
+					addToEnd(runningQueue, secondTransfer);
+
+					//Update system status
+					updateSystem(system, firstTransfer, READY_QUEUE);
+					updateSystem(system, secondTransfer, RUNNING);
+				} else {
+
+				}
 			}
-		}
-
-		if (quantumSlice == quantum) {
-			quantumSlice = 0;
-			/*Replace currently running with first in ready queue*/
-			Node *firstTransfer = remove(runningQueue, runningQueue->next->jobNumber);
-			Node *secondTransfer = remove(readyQueue, readyQueue->next->jobNumber);
-			addToEnd(readyQueue, firstTransfer);
-			addToFront(runningQueue, secondTransfer);
-
-			/*Update system status*/
-			updateSystem(system, firstTransfer, READY_QUEUE);
-			updateSystem(system, secondTransfer, RUNNING);
 		}
 
 
 			//hold queues (if job completed + memory released)
 
+		/*Decrement run times and increment quantum counter if a process is running*/
+		if (CPURunning) {
+			runningQueue->next->remainingTime--;
+			quantumSlice++;
+
+			/*Update remaining time in system*/
+			Node *temp = system;
+			while (temp->jobNumber != runningQueue->next->jobNumber) {
+				temp = temp->next;
+			}
+			temp->remainingTime--;
+		}
+
 		/*Increment real time*/
 		realTime++;
+
+		/*End simulation only when all input completed and CPU finished*/
+		if (!CPURunning && inputDone) {
+			simulating = false;
+		}
 	}
 
 	cout << memory << " " << devices << " " << quantum << endl;
 	cout << currentMemory << " " << currentDevices << " " << quantum << endl << endl;
-	testPrint(system);
 	return 1;
 }
 
@@ -320,9 +355,10 @@ void readCommand(string input, Node *sys, Node *submit) {
 
 void statusDisplay(string input, Node *sys, Node *submit, Node *hold1, Node *hold2, Node *ready, Node *run, Node *wait, Node *complete) {
 	if (input == "D 9999 " || input == "D 9999") {
-		simulating = false;
+		inputDone = true;
 		//Print system turnaround times
 	}
+	cout << "Current time: " << realTime + 1 << endl;
 	cout << "System history: " << endl;
 	printSystem(sys);
 	cout << endl << "Submit Queue contents: " << endl;
