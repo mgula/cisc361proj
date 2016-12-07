@@ -19,12 +19,17 @@ void printSystem(Node *list) {
 		int i = 1;
 		while (temp != NULL) {
 			if (temp->head == false) {
-				cout << " Job number: " << temp->jobNumber << " Status: " << temp->status << endl;
+				cout << "Job number: " << temp->jobNumber << " | Status: " << temp->status << " ";
+				if (temp->status == "Completed") {
+					cout << "| Turnaround Time: " << temp->turnaroundTime;
+				} else {
+					cout << "| Time Remaining: " << temp->remainingTime;
+				}
+				cout << endl;
 				i++;
 			}
 			temp = temp->next;
 		}
-		cout << endl;
 	}
 }
 
@@ -37,12 +42,11 @@ void traverseAndPrint(Node *list) {
 		int i = 1;
 		while (temp != NULL) {
 			if (temp->head == false) {
-				cout << "Place in queue: " << i << " Job number: " << temp->jobNumber << " " << endl;
+				cout << "Place in queue: " << i << " | Job number: " << temp->jobNumber << " " << endl;
 				i++;
 			}
 			temp = temp->next;
 		}
-		cout << endl;
 	}
 }
 
@@ -91,18 +95,6 @@ void addToEnd(Node *head, Node *addition) {
 }
 
 Node *remove(Node *head, int selectedJob){
-
-	/*if (head->next->next == NULL) {
-		if (head->next->jobNumber == selectedJob) {
-			Node *temp = head->next;
-			head->next = NULL;
-			return temp;
-		} else {
-			cout << "Can't Find Node" << endl;
-			return NULL; // return if something goes wrong
-		}
-	} else {*/
-
 	Node *temp = head;
 	Node *tempPrev = NULL; //keep track of previous node
 
@@ -116,9 +108,7 @@ Node *remove(Node *head, int selectedJob){
 		temp = temp->next;
 	}
 
-	//cout << "Can't Find Node" << endl;
 	return NULL; //Can't find node
-	//}
 }
 
 
