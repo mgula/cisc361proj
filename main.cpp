@@ -25,6 +25,7 @@ using namespace std;
 
 
 #define MAX_NUMBER_INPUTS 50
+#define LONG_TIME 9999
 
 /*Possible statuses of nodes*/
 #define REJECTED "Rejected"
@@ -50,7 +51,6 @@ int devices = 0;
 int currentDevices = 0;
 int quantum = 0;
 int quantumSlice = 0;
-bool CPURunning = false;
 bool inputDone = false;
 
 
@@ -205,7 +205,7 @@ int main () {
 		if (holdQueue1->next != NULL) {
 			Node *temp = holdQueue1;
 			int shortestJob = 0;
-			int shortestJobTime = 9999;
+			int shortestJobTime = LONG_TIME;
 			/*Get job number of shortest job*/
 			while (temp != NULL) {
 				if (temp->head == false) {
@@ -252,7 +252,6 @@ int main () {
 				Node *transfer = remove(readyQueue, readyQueue->next->jobNumber);
 				addToFront(runningQueue, transfer);
 				quantumSlice = 0; //Reset quantum time
-				CPURunning = true;
 
 				/*Update system status*/
 				updateSystem(system, transfer, RUNNING);
@@ -262,69 +261,85 @@ int main () {
 
 		/*Perform running queue maintenance*/
 		if (runningQueue->next != NULL) {
-			CPURunning = true;
-			if (runningQueue->next->remainingTime == 0) {
-				quantumSlice = 0;
-				runningQueue->next->turnaroundTime = realTime - runningQueue->next->arrivalTime;
-				if (readyQueue->next != NULL) {
-					Node *firstTransfer = remove(runningQueue, runningQueue->next->jobNumber);
-					Node *secondTransfer = remove(readyQueue, readyQueue->next->jobNumber);
-					addToEnd(completeQueue, firstTransfer);
-					addToEnd(runningQueue, secondTransfer);
-
-					//Update system status
-					updateSystem(system, firstTransfer, COMPLETED);
-					updateSystem(system, secondTransfer, RUNNING);
-				} else {
-					CPURunning = false;
-					Node *transfer = remove(runningQueue, runningQueue->next->jobNumber);
-					addToEnd(completeQueue, transfer);
-
-					//Update system status
-					updateSystem(system, transfer, COMPLETED);
-				}
-			} else if (quantumSlice == quantum) {
-				quantumSlice = 0;
-				if (readyQueue->next != NULL) {
-					Node *firstTransfer = remove(runningQueue, runningQueue->next->jobNumber);
-					Node *secondTransfer = remove(readyQueue, readyQueue->next->jobNumber);
-					addToEnd(readyQueue, firstTransfer);
-					addToEnd(runningQueue, secondTransfer);
-
-					//Update system status
-					updateSystem(system, firstTransfer, READY_QUEUE);
-					updateSystem(system, secondTransfer, RUNNING);
-				} else {
-
-				}
-			}
-		}
-
-
-			//hold queues (if job completed + memory released)
-
-		/*Decrement run times and increment quantum counter if a process is running*/
-		if (CPURunning) {
 			runningQueue->next->remainingTime--;
 			quantumSlice++;
 
-			/*Update remaining time in system*/
+			/*Update system status*/
 			Node *temp = system;
 			while (temp->jobNumber != runningQueue->next->jobNumber) {
 				temp = temp->next;
 			}
 			temp->remainingTime--;
+			if (runningQueue->next->remainingTime == 0) {
+				quantumSlice = 0;
+				runningQueue->next->turnaroundTime = (realTime) - runningQueue->next->arrivalTime;
+
+				/*Update system status*/
+				Node *temp = system;
+				while (temp->jobNumber != runningQueue->next->jobNumber) {
+					temp = temp->next;
+				}
+				temp->turnaroundTime = runningQueue->next->turnaroundTime;
+
+				currentMemory += runningQueue->next->jobMemory;
+
+				Node *transfer = remove(runningQueue, runningQueue->next->jobNumber);
+				addToEnd(completeQueue, transfer);
+
+				/*Update system status*/
+				updateSystem(system, transfer, COMPLETED);
+				if (readyQueue->next != NULL) {
+					Node *transfer = remove(readyQueue, readyQueue->next->jobNumber);
+					//if transfer != null?
+					addToEnd(runningQueue, transfer);
+
+					/*Update system status*/
+					updateSystem(system, transfer, RUNNING);
+				}
+			} else if (quantumSlice == quantum) {
+				quantumSlice = 0;
+				if (readyQueue->next != NULL) {
+					Node *firstTransfer = remove(runningQueue, runningQueue->next->jobNumber);
+					addToEnd(readyQueue, firstTransfer);
+					Node *secondTransfer = remove(readyQueue, readyQueue->next->jobNumber);
+					addToEnd(runningQueue, secondTransfer);
+
+					/*Update system status*/
+					updateSystem(system, firstTransfer, READY_QUEUE);
+					updateSystem(system, secondTransfer, RUNNING);
+				}
+			}
 		}
+
+			//hold queues (if job completed + memory released)
 
 		/*Increment real time*/
 		realTime++;
 
 		/*End simulation only when all input completed and CPU finished*/
-		if (!CPURunning && inputDone) {
+		if (runningQueue->next == NULL && inputDone) {
 			simulating = false;
 		}
 	}
-
+	cout << realTime << endl;
+	/*Final system display*/
+	cout << "System history: " << endl;
+	printSystem(system);
+	cout << endl << "Submit Queue contents: " << endl;
+	traverseAndPrint(submitQueue);
+	cout << endl << "Hold Queue 1 contents: " << endl;
+	traverseAndPrint(holdQueue1);
+	cout << endl << "Hold Queue 2 contents: " << endl;
+	traverseAndPrint(holdQueue2);
+	cout << endl << "Ready Queue contents: " << endl;
+	traverseAndPrint(readyQueue);
+	cout << endl << "Running on the CPU: " << endl;
+	traverseAndPrint(runningQueue);
+	cout << endl << "Wait Queue contents: " << endl;
+	traverseAndPrint(waitQueue);
+	cout << endl << "Complete Queue contents: " << endl;
+	traverseAndPrint(completeQueue);
+	cout << endl;
 	cout << memory << " " << devices << " " << quantum << endl;
 	cout << currentMemory << " " << currentDevices << " " << quantum << endl << endl;
 	return 1;
@@ -356,7 +371,6 @@ void readCommand(string input, Node *sys, Node *submit) {
 void statusDisplay(string input, Node *sys, Node *submit, Node *hold1, Node *hold2, Node *ready, Node *run, Node *wait, Node *complete) {
 	if (input == "D 9999 " || input == "D 9999") {
 		inputDone = true;
-		//Print system turnaround times
 	}
 	cout << "Current time: " << realTime + 1 << endl;
 	cout << "System history: " << endl;
