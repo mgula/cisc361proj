@@ -160,17 +160,12 @@ int main () {
 			}
 		}
 
-		/*Make sure to only process the current input once*/
-		if (!inputCompleted) {
+		/*Process the current input */
+		if (!allInputRead && realTime == currentInputTime) {
 			readCommand(current, system, submitQueue, runningQueue, readyQueue, waitQueue);
-			inputCompleted = true;
-		}
-
-		/*Move on to next command if current command has been processed*/
-		if (realTime >= currentInputTime && inputCompleted) {
-			if (inputNumber < numberOfInputs - 1) {
-				inputNumber++;
-				inputCompleted = false;
+			inputNumber++;
+			if (inputNumber > numberOfInputs) {
+				allInputRead = true;
 			}
 		}
 
@@ -195,7 +190,8 @@ int main () {
 							/*Update system status*/
 							updateSystem(system, transfer, HOLD_QUEUE_1);
 						} else if (transfer->jobPriority == 2) {
-								addToEnd(holdQueue2, transfer);
+							addToEnd(holdQueue2, transfer);
+
 							/*Update system status*/
 							updateSystem(system, transfer, HOLD_QUEUE_2);
 						}
