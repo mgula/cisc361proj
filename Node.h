@@ -1,8 +1,9 @@
 /*
- * Node.h
+ * Marcus Gula
+ * Thomas Nelson
+ * CISC 361
+ * Project 1
  *
- *  Created on: Dec 3, 2016
- *      Author: marcusgula
  */
 
 #ifndef NODE_H_
@@ -18,13 +19,10 @@ using namespace std;
 struct Node {
 	bool head;
 	struct Node *next;
-
 	string status;
 	int arrivalTime;
 	int completionTime;
-
 	int turnaroundTime;
-
 	int jobNumber;
 	int jobPriority;
 	int runTime;
@@ -35,13 +33,10 @@ struct Node {
 	bool jobDevicesGranted;
 };
 
-void printSystem(Node *x);
-void traverseAndPrint(Node *x);
-void insert(Node *x, Node *y, Node *z);
-void addToFront(Node *x, Node *y);
-void addToEnd(Node *x, Node *y);
-Node *remove(Node *x, int i);
-
-void testPrint(Node *x);
+void printSystem(Node *list);
+void traverseAndPrint(Node *list);
+void addToFront(Node *head, Node *addition);
+void addToEnd(Node *head, Node *addition);
+Node *remove(Node *head, int target);
 
 #endif /* NODE_H_ */

@@ -1,8 +1,9 @@
 /*
- * Node.cpp
+ * Marcus Gula
+ * Thomas Nelson
+ * CISC 361
+ * Project 1
  *
- *  Created on: Dec 3, 2016
- *      Author: marcusgula
  */
 
 #include <iostream>
@@ -11,22 +12,21 @@
 
 using namespace std;
 
+/*Traverse the system node and print information*/
 void printSystem(Node *list) {
 	Node *temp = list;
 	if (temp->next == NULL) {
 		cout << "This Queue is empty." << endl;
 	} else {
-		int i = 1;
 		while (temp != NULL) {
 			if (temp->head == false) {
-				cout << "Job number: " << temp->jobNumber << " | Status: " << temp->status << " ";
+				cout << "Job number: " << temp->jobNumber << " | Status: ";
 				if (temp->status == "Completed") {
-					cout << "| Turnaround Time: " << temp->turnaroundTime;
+					cout << temp->status << " at time " << temp->completionTime << " | Turnaround Time: " << temp->turnaroundTime;
 				} else {
-					cout << "| Time Remaining: " << temp->remainingTime;
+					cout << temp->status << " | Time Remaining: " << temp->remainingTime;
 				}
 				cout << endl;
-				i++;
 			}
 			temp = temp->next;
 		}
@@ -48,11 +48,6 @@ void traverseAndPrint(Node *list) {
 			temp = temp->next;
 		}
 	}
-}
-
-void insert(Node *first, Node *second, Node *newNode) {
-	first->next = newNode;
-	newNode->next = second;
 }
 
 /*Add node to front of list*/
@@ -79,19 +74,20 @@ void addToEnd(Node *head, Node *addition) {
 
 }
 
-Node *remove(Node *head, int selectedJob){
+/*Remove a node from a list and return that node*/
+Node *remove(Node *head, int target){
 	Node *temp = head;
-	Node *tempPrev = NULL; //keep track of previous node
+	Node *tempPrev = NULL; //Keep track of previous node
 
 	while(temp != NULL) {
-		if (temp->jobNumber == selectedJob) {//if jumber number matches what we want
-			tempPrev->next = temp->next; //removing selected node from queue
+		if (temp->jobNumber == target) {
+			tempPrev->next = temp->next; //Remove selected node from queue
 			temp->next = NULL;
-			return temp; //return removed node
+			return temp;
 		}
 		tempPrev = temp;
 		temp = temp->next;
 	}
 
-	return NULL; //Can't find node
+	return NULL; //Node not in list
 }

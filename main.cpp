@@ -1,15 +1,18 @@
 /*
- * main.cpp
- *
- *  Created on: Nov 30, 2016
- *      Author: marcusgula
+ * Marcus Gula
+ * Thomas Nelson
+ * CISC 361
+ * Project 1
  *
  * This program assumes there is ALWAYS a space after each integer. Problems may arise if
  * the text file contains a line that doesn't end in a space.
  *
  * only release what you request plz
  *
- * TODO: system turnaround time
+ * TODO: general bugginess with run (?) queue
+ * TODO: system turnaround time and weighted turnaround times
+ * TODO: wait queue maintenance?
+ * TODO: report
  */
 
 #include <iostream>
@@ -62,7 +65,6 @@ void updateSystem(Node *sys, Node *update, string status);
 int extractFromString(char *str);
 
 int main () {
-
 	/*Read input from the target text file and place in a queue of strings*/
 	string line;
 	string queue[MAX_NUMBER_INPUTS];
@@ -134,9 +136,9 @@ int main () {
 				statusDisplay(current, system, submitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, waitQueue, completeQueue);
 				if (inputNumber < numberOfInputs - 1) {
 					inputNumber++;
-				}
-				if (inputNumber >= numberOfInputs) {
-					allInputRead = true;
+					if (inputNumber >= numberOfInputs) {
+						allInputRead = true;
+					}
 				}
 				continue;
 			} else if (current[0] == 'C' || current[0] == 'A' || current[0] == 'Q' || current[0] == 'L') {
@@ -277,15 +279,16 @@ int main () {
 			temp->remainingTime--;
 
 			if (runningQueue->next->remainingTime == 0) {
-				//cout << "job #: " << runningQueue->next->jobNumber << " q: " << quantumSlice << " arrival time: " << runningQueue->next->arrivalTime << " real time: " << realTime << endl;
 				quantumSlice = 0;
-				runningQueue->next->turnaroundTime = (realTime) - runningQueue->next->arrivalTime;
+				runningQueue->next->completionTime = realTime;
+				runningQueue->next->turnaroundTime = realTime - runningQueue->next->arrivalTime;
 
 				/*Update system status*/
 				Node *temp = system;
 				while (temp->jobNumber != runningQueue->next->jobNumber) {
 					temp = temp->next;
 				}
+				temp->completionTime = realTime;
 				temp->turnaroundTime = runningQueue->next->turnaroundTime;
 
 				currentMemory += runningQueue->next->jobMemory;
@@ -378,9 +381,6 @@ int main () {
 			}
 		}
 
-			//hold queues (if job completed + memory released)
-
-		//cout << "q: " << quantumSlice << " rt: " << realTime + 1 <<endl;
 		/*Increment real time*/
 		realTime++;
 
@@ -391,7 +391,7 @@ int main () {
 	}
 
 	/*Final system display*/
-	cout << "System history: " << endl;
+	cout << "Final system status: " << endl;
 	printSystem(system);
 	cout << endl << "Submit Queue contents: " << endl;
 	traverseAndPrint(submitQueue);
@@ -407,7 +407,18 @@ int main () {
 	traverseAndPrint(waitQueue);
 	cout << endl << "Complete Queue contents: " << endl;
 	traverseAndPrint(completeQueue);
-	cout << endl;
+	cout << endl << "System turnaround time: ";
+	double i = 0;
+	int j = 0;
+	Node *temp = system;
+	while (temp->next != NULL) {
+		i += temp->turnaroundTime;
+		j++;
+		temp = temp->next;
+	}
+	i+= temp->turnaroundTime;
+	i /= j;
+	printf("%.2f", i);
 	return 1;
 }
 
@@ -441,8 +452,7 @@ void statusDisplay(string input, Node *sys, Node *submit, Node *hold1, Node *hol
 		allInputRead = true;
 		return;
 	}
-	cout << "Real Time: " << realTime << endl;
-	cout << "System history: " << endl;
+	cout << "System status at time " << realTime + 1 << ": " << endl;
 	printSystem(sys);
 	cout << endl << "Submit Queue contents: " << endl;
 	traverseAndPrint(submit);
