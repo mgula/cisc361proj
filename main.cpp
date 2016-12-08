@@ -25,9 +25,11 @@
 
 using namespace std;
 
-
 #define MAX_NUMBER_INPUTS 50
 #define LONG_TIME 9999
+
+/*Define the path of the input file*/
+#define FILE "/Users/marcusgula/Desktop/testInput"
 
 /*Possible statuses of nodes*/
 #define REJECTED "Rejected"
@@ -53,6 +55,7 @@ int currentDevices = 0;
 int quantum = 0;
 int quantumSlice = 0;
 
+/*Input processing methods*/
 void readCommand(string input, Node *sys, Node *submit, Node *run, Node *ready, Node *wait);
 void statusDisplay(string input, Node *sys, Node *submit, Node *hold1, Node *hold2, Node *ready, Node *run, Node *wait, Node *complete);
 void configureSystem(char *str);
@@ -60,6 +63,15 @@ void createJob(char *str, Node *sys, Node *submit);
 void makeRequest(char *str, Node *sys, Node *run, Node *ready, Node *wait);
 void release(char *str, Node *sys, Node *run, Node *wait, Node *ready);
 
+/*Queue maintenance methods*/
+void submitQueueMaintenance(Node *sys, Node *submit, Node *hold1, Node *hold2);
+void waitQueueMaintenance(Node *sys, Node *wait, Node *ready);
+void holdQueue1Maintenance(Node *sys, Node *hold1, Node *ready);
+void holdQueue2Maintenance(Node *sys, Node *hold2, Node *ready);
+void readyQueueMaintenance(Node *sys, Node *ready, Node *run);
+void runningQueueMaintenance(Node *sys, Node *wait, Node *hold1, Node *hold2, Node *ready, Node *run, Node *complete);
+
+/*Helper methods*/
 void updateSystem(Node *sys, Node *update, string status);
 int extractFromString(char *str);
 
@@ -67,11 +79,16 @@ int main () {
 	/*Read input from the target text file and place in a queue of strings*/
 	string line;
 	string queue[MAX_NUMBER_INPUTS];
-	ifstream myfile ("/Users/marcusgula/Desktop/testInput");
+	ifstream myfile (FILE);
 	if (myfile.is_open()) {
 		int i = 0;
 		while (getline(myfile, line)) {
-			queue[i] = line;
+			if (line[line.length() - 1] != ' ') { //Safety check
+				cout << "Line not ending with a space (line " << i + 1 << ") - input ignored." << endl;
+				i--;
+			} else {
+				queue[i] = line;
+			}
 			i++;
 		}
 		numberOfInputs = i;
@@ -119,16 +136,6 @@ int main () {
 
 		string current = queue[inputNumber];
 
-		/*Safety check*/
-		if (current[current.length() - 1] != ' ') {
-			cout << "Line not ending with a space (line " << inputNumber + 1 << ") - command ignored." << endl;
-			inputNumber++;
-			if (inputNumber >= numberOfInputs) {
-				allInputRead = true;
-			}
-			continue;
-		}
-
 		/*Update time of the current input, unless current input is a status display*/
 		if (!allInputRead) {
 			if (current[0] == 'D') {
@@ -157,7 +164,7 @@ int main () {
 			}
 		}
 
-		/*Process the current input */
+		/*Process the current input*/
 		if (!allInputRead && realTime >= currentInputTime) {
 			readCommand(current, system, submitQueue, runningQueue, readyQueue, waitQueue);
 			inputNumber++;
@@ -167,228 +174,37 @@ int main () {
 		}
 
 		/*Perform submit queue maintenance*/
-		if (submitQueue->next != NULL) {
-			Node *temp = submitQueue;
-			while (temp != NULL) {
-				if (temp->head == false) {
-					if (temp->jobMemory > memory || temp->maxJobDevices > devices) {
-						/*Reject this job - can never satisfy*/
-						remove(submitQueue, temp->jobNumber);
-
-						/*Update system status*/
-						updateSystem(system, temp, REJECTED);
-					}
-					/*Transfer from submit queue to hold queues*/
-					Node *transfer = remove(submitQueue, temp->jobNumber);
-					if (transfer != NULL) {
-						if (transfer->jobPriority == 1) {
-							addToEnd(holdQueue1, transfer);
-
-							/*Update system status*/
-							updateSystem(system, transfer, HOLD_QUEUE_1);
-						} else if (transfer->jobPriority == 2) {
-							addToEnd(holdQueue2, transfer);
-
-							/*Update system status*/
-							updateSystem(system, transfer, HOLD_QUEUE_2);
-						}
-					}
-				}
-				temp = temp->next;
-			}
-		}
+		submitQueueMaintenance(system, submitQueue, holdQueue1, holdQueue2);
 
 		/*Perform wait queue maintenance*/
-		if (waitQueue->next != NULL) {
-			Node *temp = waitQueue;
-			while (temp != NULL) {
-				if (temp->head == false) {
-					if (temp->maxJobDevices <= currentDevices) {
-						Node *transfer = remove(waitQueue, temp->jobNumber);
-						addToEnd(readyQueue, transfer);
-
-						/*Update system status*/
-						updateSystem(system, transfer, READY_QUEUE);
-					}
-				}
-				temp = temp->next;
-			}
-		}
+		waitQueueMaintenance(system, waitQueue, readyQueue);
 
 		/*Perform hold queue 1 maintenance*/
-		if (holdQueue1->next != NULL) {
-			Node *temp = holdQueue1;
-			int shortestJob = 0;
-			int shortestJobTime = LONG_TIME;
-			/*Get job number of shortest job*/
-			while (temp != NULL) {
-				if (temp->head == false) {
-					if (temp->jobMemory <= currentMemory && temp->maxJobDevices <= currentDevices) {
-						if (temp->runTime < shortestJobTime) {
-							shortestJobTime = temp->runTime;
-							shortestJob = temp->jobNumber;
-						}
-					}
-				}
-				temp = temp->next;
-			}
-			/*Remove job from hold queue 1 and add to ready queue*/
-			if (shortestJob > 0){
-				Node *transfer = remove(holdQueue1, shortestJob);
-				addToEnd(readyQueue, transfer);
-				currentMemory -= transfer->jobMemory;
-
-				/*Update system status*/
-				updateSystem(system, transfer, READY_QUEUE);
-			}
-		}
+		holdQueue1Maintenance(system, holdQueue1, readyQueue);
 
 		/*Perform hold queue 2 maintenance*/
-		if (holdQueue2->next != NULL) {
-			Node *temp = holdQueue2;
-			/*Get last node (first in)*/
-			while (temp->next != NULL) {
-				temp = temp->next;
-			}
-			if (temp->jobMemory <= currentMemory && temp->maxJobDevices <= currentDevices) {
-				Node *transfer = remove(holdQueue2, temp->jobNumber);
-				addToEnd(readyQueue, transfer);
-				currentMemory = currentMemory - transfer->jobMemory;
-
-				/*Update system status*/
-				updateSystem(system, transfer, READY_QUEUE);
-			}
-		}
+		holdQueue2Maintenance(system, holdQueue2, readyQueue);
 
 		/*Perform ready queue maintenance*/
-		if (readyQueue->next != NULL) {
-			if (runningQueue->next == NULL) {
-				Node *transfer = remove(readyQueue, readyQueue->next->jobNumber);
-				addToFront(runningQueue, transfer);
-				quantumSlice = 0; //Reset quantum time
-
-				/*Update system status*/
-				updateSystem(system, transfer, RUNNING);
-			}
-		}
-
+		readyQueueMaintenance(system, readyQueue, runningQueue);
 
 		/*Perform running queue maintenance*/
-		if (runningQueue->next != NULL) {
-			runningQueue->next->remainingTime--;
-			quantumSlice++;
+		runningQueueMaintenance(system, waitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, completeQueue);
 
-			/*Update system status*/
-			Node *temp = system;
-			while (temp->jobNumber != runningQueue->next->jobNumber) {
-				temp = temp->next;
-			}
-			temp->remainingTime--;
+		/*Handle time slice switch*/
+		 if (quantumSlice == quantum) {
+			 quantumSlice = 0;
+			 if (readyQueue->next != NULL) {
+				 Node *firstTransfer = remove(runningQueue, runningQueue->next->jobNumber);
+				 addToEnd(readyQueue, firstTransfer);
+				 Node *secondTransfer = remove(readyQueue, readyQueue->next->jobNumber);
+				 addToEnd(runningQueue, secondTransfer);
 
-			if (runningQueue->next->remainingTime + 1 == 0) {
-				quantumSlice = 0;
-				runningQueue->next->completionTime = realTime;
-				runningQueue->next->turnaroundTime = realTime - runningQueue->next->arrivalTime;
-				runningQueue->next->weightedTT = (double)runningQueue->next->turnaroundTime/(double)runningQueue->next->runTime;
-
-				/*Update system status*/
-				Node *temp = system;
-				while (temp->jobNumber != runningQueue->next->jobNumber) {
-					temp = temp->next;
-				}
-				temp->completionTime = realTime;
-				temp->turnaroundTime = runningQueue->next->turnaroundTime;
-				temp->weightedTT = runningQueue->next->weightedTT;
-
-				currentMemory += runningQueue->next->jobMemory;
-
-				if (runningQueue->jobDevicesGranted) {
-					currentDevices += runningQueue->devicesRequested;
-				}
-
-				Node *transfer = remove(runningQueue, runningQueue->next->jobNumber);
-				addToEnd(completeQueue, transfer);
-
-				/*Update system status*/
-				updateSystem(system, transfer, COMPLETED);
-
-				/*Check wait queue, then hold queue 1, then hold queue 2*/
-				if (waitQueue->next != NULL) {
-					Node *temp = waitQueue;
-					while (temp != NULL) {
-						if (temp->maxJobDevices <= currentDevices) {
-							Node *transfer = remove(waitQueue, temp->jobNumber);
-							addToFront(readyQueue, transfer);
-
-							/*Update system status*/
-							updateSystem(system, transfer, READY_QUEUE);
-						}
-						temp = temp->next;
-					}
-				}
-				if (holdQueue1->next != NULL) {
-					Node *temp = holdQueue1;
-					int shortestJob = 0;
-					int shortestJobTime = LONG_TIME;
-					/*Get job number of shortest job*/
-					while (temp != NULL) {
-						if (temp->head == false) {
-							if (temp->jobMemory <= currentMemory && temp->maxJobDevices <= currentDevices) {
-								if (temp->runTime < shortestJobTime) {
-									shortestJobTime = temp->runTime;
-									shortestJob = temp->jobNumber;
-								}
-							}
-						}
-						temp = temp->next;
-					}
-					/*Remove job from hold queue 1 and add to ready queue*/
-					if (shortestJob > 0){
-						Node *transfer = remove(holdQueue1, shortestJob);
-						addToEnd(readyQueue, transfer);
-						currentMemory -= transfer->jobMemory;
-
-						/*Update system status*/
-						updateSystem(system, transfer, READY_QUEUE);
-					}
-				}
-				if (holdQueue2->next != NULL) {
-					Node *temp = holdQueue2;
-					/*Get last node (first in)*/
-					while (temp->next != NULL) {
-						temp = temp->next;
-					}
-					if (temp->jobMemory <= currentMemory && temp->maxJobDevices <= currentDevices) {
-						Node *transfer = remove(holdQueue2, temp->jobNumber);
-						addToEnd(readyQueue, transfer);
-						currentMemory = currentMemory - transfer->jobMemory;
-
-						/*Update system status*/
-						updateSystem(system, transfer, READY_QUEUE);
-					}
-				}
-				/*Run next job on the CPU*/
-				if (readyQueue->next != NULL) {
-					Node *transfer = remove(readyQueue, readyQueue->next->jobNumber);
-					addToEnd(runningQueue, transfer);
-
-					/*Update system status*/
-					updateSystem(system, transfer, RUNNING);
-				}
-			} else if (quantumSlice == quantum) {
-				quantumSlice = 0;
-				if (readyQueue->next != NULL) {
-					Node *firstTransfer = remove(runningQueue, runningQueue->next->jobNumber);
-					addToEnd(readyQueue, firstTransfer);
-					Node *secondTransfer = remove(readyQueue, readyQueue->next->jobNumber);
-					addToEnd(runningQueue, secondTransfer);
-
-					/*Update system status*/
-					updateSystem(system, firstTransfer, READY_QUEUE);
-					updateSystem(system, secondTransfer, RUNNING);
-				}
-			}
-		}
+				 /*Update system status*/
+				 updateSystem(system, firstTransfer, READY_QUEUE);
+				 updateSystem(system, secondTransfer, RUNNING);
+			 }
+		 }
 
 		/*Increment real time*/
 		realTime++;
@@ -437,6 +253,7 @@ int main () {
 	return 1;
 }
 
+/*Input processing methods*/
 void readCommand(string input, Node *sys, Node *submit, Node *run, Node *ready, Node *wait) {
 	/*Convert the string to a char array and split (space as delimiter)*/
 	char parsed[input.length()];
@@ -640,6 +457,167 @@ void release(char *str, Node *sys, Node *run, Node *wait, Node *ready) {
 	}
 }
 
+/*Maintenance methods*/
+void submitQueueMaintenance(Node *sys, Node *submit, Node *hold1, Node *hold2) {
+	if (submit->next != NULL) {
+		Node *temp = submit;
+		while (temp != NULL) {
+			if (temp->head == false) {
+				if (temp->jobMemory > memory || temp->maxJobDevices > devices) {
+					/*Reject this job - can never satisfy*/
+					remove(submit, temp->jobNumber);
+
+					/*Update system status*/
+					updateSystem(sys, temp, REJECTED);
+				}
+				/*Transfer from submit queue to hold queues*/
+				Node *transfer = remove(submit, temp->jobNumber);
+				if (transfer != NULL) {
+					if (transfer->jobPriority == 1) {
+						addToEnd(hold1, transfer);
+
+						/*Update system status*/
+						updateSystem(sys, transfer, HOLD_QUEUE_1);
+					} else if (transfer->jobPriority == 2) {
+						addToEnd(hold2, transfer);
+
+						/*Update system status*/
+						updateSystem(sys, transfer, HOLD_QUEUE_2);
+					}
+				}
+			}
+			temp = temp->next;
+		}
+	}
+}
+
+void waitQueueMaintenance(Node *sys, Node *wait, Node *ready) {
+	if (wait->next != NULL) {
+		Node *temp = wait;
+		while (temp != NULL) {
+			if (temp->head == false) {
+				if (temp->maxJobDevices <= currentDevices) {
+					Node *transfer = remove(wait, temp->jobNumber);
+					addToEnd(ready, transfer);
+
+					/*Update system status*/
+					updateSystem(sys, transfer, READY_QUEUE);
+				}
+			}
+			temp = temp->next;
+		}
+	}
+}
+
+void holdQueue1Maintenance(Node *sys, Node *hold1, Node *ready) {
+	if (hold1->next != NULL) {
+		Node *temp = hold1;
+		int shortestJob = 0;
+		int shortestJobTime = LONG_TIME;
+		/*Get job number of shortest job*/
+		while (temp != NULL) {
+			if (temp->head == false) {
+				if (temp->jobMemory <= currentMemory && temp->maxJobDevices <= currentDevices) {
+					if (temp->runTime < shortestJobTime) {
+						shortestJobTime = temp->runTime;
+						shortestJob = temp->jobNumber;
+					}
+				}
+			}
+			temp = temp->next;
+		}
+		/*Remove job from hold queue 1 and add to ready queue*/
+		if (shortestJob > 0){
+			Node *transfer = remove(hold1, shortestJob);
+			addToEnd(ready, transfer);
+			currentMemory -= transfer->jobMemory;
+
+			/*Update system status*/
+			updateSystem(sys, transfer, READY_QUEUE);
+		}
+	}
+}
+
+void holdQueue2Maintenance(Node *sys, Node *hold2, Node *ready) {
+	if (hold2->next != NULL) {
+		Node *temp = hold2;
+		/*Get last node (first in)*/
+		while (temp->next != NULL) {
+			temp = temp->next;
+		}
+		if (temp->jobMemory <= currentMemory && temp->maxJobDevices <= currentDevices) {
+			Node *transfer = remove(hold2, temp->jobNumber);
+			addToEnd(ready, transfer);
+			currentMemory = currentMemory - transfer->jobMemory;
+
+			/*Update system status*/
+			updateSystem(sys, transfer, READY_QUEUE);
+		}
+	}
+}
+
+void readyQueueMaintenance(Node *sys, Node *ready, Node *run) {
+	if (ready->next != NULL) {
+		if (run->next == NULL) {
+			Node *transfer = remove(ready, ready->next->jobNumber);
+			addToFront(run, transfer);
+			quantumSlice = 0; //Reset quantum time
+
+			/*Update system status*/
+			updateSystem(sys, transfer, RUNNING);
+		}
+	}
+}
+
+void runningQueueMaintenance(Node *sys, Node *wait, Node *hold1, Node *hold2, Node *ready, Node *run, Node *complete) {
+	if (run->next != NULL) {
+		run->next->remainingTime--;
+		quantumSlice++;
+
+		/*Update system status*/
+		Node *temp = sys;
+		while (temp->jobNumber != run->next->jobNumber) {
+			temp = temp->next;
+		}
+		temp->remainingTime--;
+
+		if (run->next->remainingTime + 1 == 0) {
+			quantumSlice = 0;
+			run->next->completionTime = realTime;
+			run->next->turnaroundTime = realTime - run->next->arrivalTime;
+			run->next->weightedTT = (double)run->next->turnaroundTime/(double)run->next->runTime;
+
+			/*Update system status*/
+			Node *temp = sys;
+			while (temp->jobNumber != run->next->jobNumber) {
+				temp = temp->next;
+			}
+			temp->completionTime = realTime;
+			temp->turnaroundTime = run->next->turnaroundTime;
+			temp->weightedTT = run->next->weightedTT;
+
+			currentMemory += run->next->jobMemory;
+
+			if (run->jobDevicesGranted) {
+				currentDevices += run->devicesRequested;
+			}
+
+			Node *transfer = remove(run, run->next->jobNumber);
+			addToEnd(complete, transfer);
+
+			/*Update system status*/
+			updateSystem(sys, transfer, COMPLETED);
+
+			/*Check wait queue, then hold queue 1, then hold queue 2*/
+			waitQueueMaintenance(sys, wait, ready);
+			holdQueue1Maintenance(sys, hold1, ready);
+			holdQueue2Maintenance(sys, hold2, ready);
+			readyQueueMaintenance(sys, ready, run);
+		}
+	}
+}
+
+/*Helper methods*/
 void updateSystem(Node *sys, Node *update, string status) {
 	Node *temp = sys;
 	while (temp != NULL) {
