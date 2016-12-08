@@ -23,6 +23,7 @@ struct Node {
 	int arrivalTime;
 	int completionTime;
 	int turnaroundTime;
+	double weightedTT;
 	int jobNumber;
 	int jobPriority;
 	int runTime;

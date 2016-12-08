@@ -42,7 +42,6 @@ using namespace std;
 int realTime = 0;
 int inputNumber = 0;
 bool simulating = true;
-bool inputCompleted = false;
 bool allInputRead = false;
 int currentInputTime;
 int numberOfInputs;
@@ -134,11 +133,9 @@ int main () {
 		if (!allInputRead) {
 			if (current[0] == 'D') {
 				statusDisplay(current, system, submitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, waitQueue, completeQueue);
-				if (inputNumber < numberOfInputs - 1) {
-					inputNumber++;
-					if (inputNumber >= numberOfInputs) {
-						allInputRead = true;
-					}
+				inputNumber++;
+				if (inputNumber > numberOfInputs - 1) {
+					allInputRead = true;
 				}
 				continue;
 			} else if (current[0] == 'C' || current[0] == 'A' || current[0] == 'Q' || current[0] == 'L') {
@@ -161,10 +158,10 @@ int main () {
 		}
 
 		/*Process the current input */
-		if (!allInputRead && realTime == currentInputTime) {
+		if (!allInputRead && realTime >= currentInputTime) {
 			readCommand(current, system, submitQueue, runningQueue, readyQueue, waitQueue);
 			inputNumber++;
-			if (inputNumber > numberOfInputs) {
+			if (inputNumber >= numberOfInputs - 1) {
 				allInputRead = true;
 			}
 		}
@@ -202,7 +199,21 @@ int main () {
 		}
 
 		/*Perform wait queue maintenance*/
+		if (waitQueue->next != NULL) {
+			Node *temp = waitQueue;
+			while (temp != NULL) {
+				if (temp->head == false) {
+					if (temp->maxJobDevices <= currentDevices) {
+						Node *transfer = remove(waitQueue, temp->jobNumber);
+						addToEnd(readyQueue, transfer);
 
+						/*Update system status*/
+						updateSystem(system, transfer, READY_QUEUE);
+					}
+				}
+				temp = temp->next;
+			}
+		}
 
 		/*Perform hold queue 1 maintenance*/
 		if (holdQueue1->next != NULL) {
@@ -274,10 +285,11 @@ int main () {
 			}
 			temp->remainingTime--;
 
-			if (runningQueue->next->remainingTime == 0) {
+			if (runningQueue->next->remainingTime + 1 == 0) {
 				quantumSlice = 0;
 				runningQueue->next->completionTime = realTime;
 				runningQueue->next->turnaroundTime = realTime - runningQueue->next->arrivalTime;
+				runningQueue->next->weightedTT = (double)runningQueue->next->turnaroundTime/(double)runningQueue->next->runTime;
 
 				/*Update system status*/
 				Node *temp = system;
@@ -286,6 +298,7 @@ int main () {
 				}
 				temp->completionTime = realTime;
 				temp->turnaroundTime = runningQueue->next->turnaroundTime;
+				temp->weightedTT = runningQueue->next->weightedTT;
 
 				currentMemory += runningQueue->next->jobMemory;
 
@@ -403,18 +416,24 @@ int main () {
 	traverseAndPrint(waitQueue);
 	cout << endl << "Complete Queue contents: " << endl;
 	traverseAndPrint(completeQueue);
-	cout << endl << "System turnaround time: ";
+	cout << endl << "Average turnaround time: ";
 	double i = 0;
+	double k = 0;
 	int j = 0;
 	Node *temp = system;
 	while (temp->next != NULL) {
 		i += temp->turnaroundTime;
+		k += temp->weightedTT;
 		j++;
 		temp = temp->next;
 	}
-	i+= temp->turnaroundTime;
+	i += temp->turnaroundTime;
+	k += temp->weightedTT;
 	i /= j;
 	printf("%.2f", i);
+	cout << endl << "Average weighted turnaround time: ";
+	k /= j;
+	printf("%.2f", k);
 	return 1;
 }
 
@@ -448,7 +467,7 @@ void statusDisplay(string input, Node *sys, Node *submit, Node *hold1, Node *hol
 		allInputRead = true;
 		return;
 	}
-	cout << "System status at time " << realTime + 1 << ": " << endl;
+	cout << "System status at time " << realTime << ": " << endl;
 	printSystem(sys);
 	cout << endl << "Submit Queue contents: " << endl;
 	traverseAndPrint(submit);
@@ -539,11 +558,21 @@ void makeRequest(char *str, Node *sys, Node *run, Node *ready, Node *wait) {
 	run->next->devicesRequested = d;
 
 	if (j != run->next->jobNumber) {
+		cout << "Job " << j << "'s request for " << d << " devices denied." << endl;
+		cout << "Job " << j << " not running on the CPU." << endl << endl;
+		return;
+	}
+
+	if (run->next->devicesRequested > run->next->maxJobDevices) {
+		cout << "Job " << j << "'s request for " << d << " devices denied." << endl;
+		cout << "Request exceeds maximum." << endl << endl;
 		return;
 	}
 
 	if (j == run->next->jobNumber && d <= currentDevices) {
-		run->jobDevicesGranted = true;
+		cout << "Job " << j << "'s request for " << d << " devices granted." << endl << endl;
+
+		run->next->jobDevicesGranted = true;
 		currentDevices -= d;
 		Node *transfer = remove(run, run->next->jobNumber);
 		addToEnd(ready, transfer);
@@ -551,12 +580,19 @@ void makeRequest(char *str, Node *sys, Node *run, Node *ready, Node *wait) {
 		/*Update system status*/
 		updateSystem(sys, transfer, READY_QUEUE);
 	} else {
-		run->jobDevicesGranted = false;
-		Node *transfer = remove(run, run->next->jobNumber);
-		addToEnd(wait, transfer);
+		cout << "Job " << j << "'s request for " << d << " devices denied." << endl;
+		cout << "Devices not available." << endl << endl;
+
+		run->next->jobDevicesGranted = false;
+		Node *firstTransfer = remove(run, run->next->jobNumber);
+		addToEnd(wait, firstTransfer);
+
+		Node *secondTransfer = remove(ready, ready->next->jobNumber);
+		addToEnd(run, secondTransfer);
 
 		/*Update system status*/
-		updateSystem(sys, transfer, WAIT_QUEUE);
+		updateSystem(sys, firstTransfer, WAIT_QUEUE);
+		updateSystem(sys, secondTransfer, RUNNING);
 	}
 }
 
@@ -574,10 +610,17 @@ void release(char *str, Node *sys, Node *run, Node *wait, Node *ready) {
 	}
 
 	if (j != run->next->jobNumber) {
+		cout << "Job " << j << " couldn't release devices. " << endl;
+		cout << "Job " << j << " not running on the CPU. " << endl << endl;
 		return;
 	}
 
 	if (run->next->jobDevicesGranted) {
+		if (d > run->next->devicesRequested) {
+			cout << "Job " << j << " couldn't release devices. " << endl;
+			cout << "Release exceeds amount of devices requested. " << endl << endl;
+			return;
+		}
 		currentDevices += d;
 
 		Node *temp = wait;
@@ -591,6 +634,9 @@ void release(char *str, Node *sys, Node *run, Node *wait, Node *ready) {
 			}
 			temp = temp->next;
 		}
+	} else {
+		cout << "Job " << j << " couldn't release devices. " << endl;
+		cout << "Job " << j << "'s initial request for devices was denied. " << endl << endl;
 	}
 }
 
