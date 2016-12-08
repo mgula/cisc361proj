@@ -18,7 +18,6 @@ using namespace std;
 struct Node {
 	bool head;
 	struct Node *next;
-	int listSize;
 
 	string status;
 	int arrivalTime;
@@ -31,8 +30,9 @@ struct Node {
 	int runTime;
 	int remainingTime;
 	int jobMemory;
-	int jobDevices;
-	int jobDevicesRequested;
+	int maxJobDevices;
+	int devicesRequested;
+	bool jobDevicesGranted;
 };
 
 void printSystem(Node *x);

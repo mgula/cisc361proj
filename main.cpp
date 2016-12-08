@@ -7,10 +7,9 @@
  * This program assumes there is ALWAYS a space after each integer. Problems may arise if
  * the text file contains a line that doesn't end in a space.
  *
+ * only release what you request plz
  *
- * Questions for TA:
- * what should the output actually be?
- * numeric constants?
+ * TODO: system turnaround time
  */
 
 #include <iostream>
@@ -41,9 +40,9 @@ int realTime = 0;
 int inputNumber = 0;
 bool simulating = true;
 bool inputCompleted = false;
+bool allInputRead = false;
 int currentInputTime;
 int numberOfInputs;
-int systemStartTime;
 
 int memory = 0;
 int currentMemory = 0;
@@ -51,13 +50,13 @@ int devices = 0;
 int currentDevices = 0;
 int quantum = 0;
 int quantumSlice = 0;
-bool inputDone = false;
 
-
-void readCommand(string input, Node *sys, Node *submit);
+void readCommand(string input, Node *sys, Node *submit, Node *run, Node *ready, Node *wait);
 void statusDisplay(string input, Node *sys, Node *submit, Node *hold1, Node *hold2, Node *ready, Node *run, Node *wait, Node *complete);
 void configureSystem(char *str);
 void createJob(char *str, Node *sys, Node *submit);
+void makeRequest(char *str, Node *sys, Node *run, Node *ready, Node *wait);
+void release(char *str, Node *sys, Node *run, Node *wait, Node *ready);
 
 void updateSystem(Node *sys, Node *update, string status);
 int extractFromString(char *str);
@@ -124,16 +123,22 @@ int main () {
 			cout << "Line not ending with a space (line " << inputNumber + 1 << ") - command ignored." << endl;
 			inputNumber++;
 			if (inputNumber >= numberOfInputs) {
-				inputDone = true;
+				allInputRead = true;
 			}
 			continue;
 		}
 
 		/*Update time of the current input, unless current input is a status display*/
-		if(!inputDone) {
+		if (!allInputRead) {
 			if (current[0] == 'D') {
 				statusDisplay(current, system, submitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, waitQueue, completeQueue);
-				inputCompleted = true;
+				if (inputNumber < numberOfInputs - 1) {
+					inputNumber++;
+				}
+				if (inputNumber >= numberOfInputs) {
+					allInputRead = true;
+				}
+				continue;
 			} else if (current[0] == 'C' || current[0] == 'A' || current[0] == 'Q' || current[0] == 'L') {
 				char parsed[current.length()];
 				std::strcpy(parsed, current.c_str()); //Convert string to char array - type out std:: just to be safe
@@ -155,7 +160,7 @@ int main () {
 
 		/*Make sure to only process the current input once*/
 		if (!inputCompleted) {
-			readCommand(current, system, submitQueue);
+			readCommand(current, system, submitQueue, runningQueue, readyQueue, waitQueue);
 			inputCompleted = true;
 		}
 
@@ -172,7 +177,7 @@ int main () {
 			Node *temp = submitQueue;
 			while (temp != NULL) {
 				if (temp->head == false) {
-					if (temp->jobMemory > memory || temp->jobDevices > devices) {
+					if (temp->jobMemory > memory || temp->maxJobDevices > devices) {
 						/*Reject this job - can never satisfy*/
 						remove(submitQueue, temp->jobNumber);
 
@@ -183,12 +188,12 @@ int main () {
 					Node *transfer = remove(submitQueue, temp->jobNumber);
 					if (transfer != NULL) {
 						if (transfer->jobPriority == 1) {
-							addToFront(holdQueue1, transfer);
+							addToEnd(holdQueue1, transfer);
 
 							/*Update system status*/
 							updateSystem(system, transfer, HOLD_QUEUE_1);
 						} else if (transfer->jobPriority == 2) {
-								addToFront(holdQueue2, transfer);
+								addToEnd(holdQueue2, transfer);
 							/*Update system status*/
 							updateSystem(system, transfer, HOLD_QUEUE_2);
 						}
@@ -209,7 +214,7 @@ int main () {
 			/*Get job number of shortest job*/
 			while (temp != NULL) {
 				if (temp->head == false) {
-					if (temp->jobMemory <= currentMemory && temp->jobDevices <= currentDevices) {
+					if (temp->jobMemory <= currentMemory && temp->maxJobDevices <= currentDevices) {
 						if (temp->runTime < shortestJobTime) {
 							shortestJobTime = temp->runTime;
 							shortestJob = temp->jobNumber;
@@ -221,8 +226,8 @@ int main () {
 			/*Remove job from hold queue 1 and add to ready queue*/
 			if (shortestJob > 0){
 				Node *transfer = remove(holdQueue1, shortestJob);
-				addToFront(readyQueue, transfer);
-				currentMemory = currentMemory - transfer->jobMemory;
+				addToEnd(readyQueue, transfer);
+				currentMemory -= transfer->jobMemory;
 
 				/*Update system status*/
 				updateSystem(system, transfer, READY_QUEUE);
@@ -236,9 +241,9 @@ int main () {
 			while (temp->next != NULL) {
 				temp = temp->next;
 			}
-			if (temp->jobMemory <= currentMemory && temp->jobDevices <= currentDevices) {
+			if (temp->jobMemory <= currentMemory && temp->maxJobDevices <= currentDevices) {
 				Node *transfer = remove(holdQueue2, temp->jobNumber);
-				addToFront(readyQueue, transfer);
+				addToEnd(readyQueue, transfer);
 				currentMemory = currentMemory - transfer->jobMemory;
 
 				/*Update system status*/
@@ -270,7 +275,9 @@ int main () {
 				temp = temp->next;
 			}
 			temp->remainingTime--;
+
 			if (runningQueue->next->remainingTime == 0) {
+				//cout << "job #: " << runningQueue->next->jobNumber << " q: " << quantumSlice << " arrival time: " << runningQueue->next->arrivalTime << " real time: " << realTime << endl;
 				quantumSlice = 0;
 				runningQueue->next->turnaroundTime = (realTime) - runningQueue->next->arrivalTime;
 
@@ -283,14 +290,74 @@ int main () {
 
 				currentMemory += runningQueue->next->jobMemory;
 
+				if (runningQueue->jobDevicesGranted) {
+					currentDevices += runningQueue->devicesRequested;
+				}
+
 				Node *transfer = remove(runningQueue, runningQueue->next->jobNumber);
 				addToEnd(completeQueue, transfer);
 
 				/*Update system status*/
 				updateSystem(system, transfer, COMPLETED);
+
+				/*Check wait queue, then hold queue 1, then hold queue 2*/
+				if (waitQueue->next != NULL) {
+					Node *temp = waitQueue;
+					while (temp != NULL) {
+						if (temp->maxJobDevices <= currentDevices) {
+							Node *transfer = remove(waitQueue, temp->jobNumber);
+							addToFront(readyQueue, transfer);
+
+							/*Update system status*/
+							updateSystem(system, transfer, READY_QUEUE);
+						}
+						temp = temp->next;
+					}
+				}
+				if (holdQueue1->next != NULL) {
+					Node *temp = holdQueue1;
+					int shortestJob = 0;
+					int shortestJobTime = LONG_TIME;
+					/*Get job number of shortest job*/
+					while (temp != NULL) {
+						if (temp->head == false) {
+							if (temp->jobMemory <= currentMemory && temp->maxJobDevices <= currentDevices) {
+								if (temp->runTime < shortestJobTime) {
+									shortestJobTime = temp->runTime;
+									shortestJob = temp->jobNumber;
+								}
+							}
+						}
+						temp = temp->next;
+					}
+					/*Remove job from hold queue 1 and add to ready queue*/
+					if (shortestJob > 0){
+						Node *transfer = remove(holdQueue1, shortestJob);
+						addToEnd(readyQueue, transfer);
+						currentMemory -= transfer->jobMemory;
+
+						/*Update system status*/
+						updateSystem(system, transfer, READY_QUEUE);
+					}
+				}
+				if (holdQueue2->next != NULL) {
+					Node *temp = holdQueue2;
+					/*Get last node (first in)*/
+					while (temp->next != NULL) {
+						temp = temp->next;
+					}
+					if (temp->jobMemory <= currentMemory && temp->maxJobDevices <= currentDevices) {
+						Node *transfer = remove(holdQueue2, temp->jobNumber);
+						addToEnd(readyQueue, transfer);
+						currentMemory = currentMemory - transfer->jobMemory;
+
+						/*Update system status*/
+						updateSystem(system, transfer, READY_QUEUE);
+					}
+				}
+				/*Run next job on the CPU*/
 				if (readyQueue->next != NULL) {
 					Node *transfer = remove(readyQueue, readyQueue->next->jobNumber);
-					//if transfer != null?
 					addToEnd(runningQueue, transfer);
 
 					/*Update system status*/
@@ -313,15 +380,16 @@ int main () {
 
 			//hold queues (if job completed + memory released)
 
+		//cout << "q: " << quantumSlice << " rt: " << realTime + 1 <<endl;
 		/*Increment real time*/
 		realTime++;
 
 		/*End simulation only when all input completed and CPU finished*/
-		if (runningQueue->next == NULL && inputDone) {
+		if (runningQueue->next == NULL && allInputRead) {
 			simulating = false;
 		}
 	}
-	cout << realTime << endl;
+
 	/*Final system display*/
 	cout << "System history: " << endl;
 	printSystem(system);
@@ -340,12 +408,10 @@ int main () {
 	cout << endl << "Complete Queue contents: " << endl;
 	traverseAndPrint(completeQueue);
 	cout << endl;
-	cout << memory << " " << devices << " " << quantum << endl;
-	cout << currentMemory << " " << currentDevices << " " << quantum << endl << endl;
 	return 1;
 }
 
-void readCommand(string input, Node *sys, Node *submit) {
+void readCommand(string input, Node *sys, Node *submit, Node *run, Node *ready, Node *wait) {
 	/*Convert the string to a char array and split (space as delimiter)*/
 	char parsed[input.length()];
 	std::strcpy(parsed, input.c_str());
@@ -361,8 +427,10 @@ void readCommand(string input, Node *sys, Node *submit) {
 		createJob(str, sys, submit);
 	} else if (input[0] == 'Q') {
 		/*A request for devices*/
+		makeRequest(str, sys, run, ready, wait);
 	} else if (input[0] == 'L') {
 		/*A release of devices*/
+		release(str, sys, run, wait, ready);
 	} else {
 		/*Unrecognized input*/
 	}
@@ -370,9 +438,10 @@ void readCommand(string input, Node *sys, Node *submit) {
 
 void statusDisplay(string input, Node *sys, Node *submit, Node *hold1, Node *hold2, Node *ready, Node *run, Node *wait, Node *complete) {
 	if (input == "D 9999 " || input == "D 9999") {
-		inputDone = true;
+		allInputRead = true;
+		return;
 	}
-	cout << "Current time: " << realTime + 1 << endl;
+	cout << "Real Time: " << realTime << endl;
 	cout << "System history: " << endl;
 	printSystem(sys);
 	cout << endl << "Submit Queue contents: " << endl;
@@ -393,7 +462,6 @@ void statusDisplay(string input, Node *sys, Node *submit, Node *hold1, Node *hol
 }
 
 void configureSystem(char *str) {
-	systemStartTime = currentInputTime;
 	while (str != NULL) {
 		if (str[0] == 'M') {
 			memory = extractFromString(str);
@@ -430,8 +498,8 @@ void createJob(char *str, Node *sys, Node *submit) {
 			job->jobMemory = extractFromString(str);
 			copy->jobMemory = extractFromString(str);
 		} else if (str[0] == 'S') {
-			job->jobDevices = extractFromString(str);
-			copy->jobDevices = extractFromString(str);
+			job->maxJobDevices = extractFromString(str);
+			copy->maxJobDevices = extractFromString(str);
 		} else if (str[0] == 'R') {
 			job->runTime = extractFromString(str);
 			job->remainingTime = job->runTime;
@@ -448,6 +516,76 @@ void createJob(char *str, Node *sys, Node *submit) {
 
 	addToEnd(submit, job);
 	addToEnd(sys, copy);
+}
+
+void makeRequest(char *str, Node *sys, Node *run, Node *ready, Node *wait) {
+	quantumSlice = 0;
+	int j = 0;
+	int d = 0;
+	while (str != NULL) {
+		if (str[0] == 'J') {
+			j = extractFromString(str);
+		} else if (str[0] == 'D') {
+			d = extractFromString(str);
+		}
+		str = std::strtok (NULL, " ");
+	}
+	run->next->devicesRequested = d;
+
+	if (j != run->next->jobNumber) {
+		return;
+	}
+
+	if (j == run->next->jobNumber && d <= currentDevices) {
+		run->jobDevicesGranted = true;
+		currentDevices -= d;
+		Node *transfer = remove(run, run->next->jobNumber);
+		addToEnd(ready, transfer);
+
+		/*Update system status*/
+		updateSystem(sys, transfer, READY_QUEUE);
+	} else {
+		run->jobDevicesGranted = false;
+		Node *transfer = remove(run, run->next->jobNumber);
+		addToEnd(wait, transfer);
+
+		/*Update system status*/
+		updateSystem(sys, transfer, WAIT_QUEUE);
+	}
+}
+
+void release(char *str, Node *sys, Node *run, Node *wait, Node *ready) {
+	quantumSlice = 0;
+	int j = 0;
+	int d = 0;
+	while (str != NULL) {
+		if (str[0] == 'J') {
+			j = extractFromString(str);
+		} else if (str[0] == 'D') {
+			d = extractFromString(str);
+		}
+		str = std::strtok (NULL, " ");
+	}
+
+	if (j != run->next->jobNumber) {
+		return;
+	}
+
+	if (run->next->jobDevicesGranted) {
+		currentDevices += d;
+
+		Node *temp = wait;
+		while (temp->next != NULL) {
+			if (temp->maxJobDevices <= currentDevices) {
+				Node *transfer = remove(wait, temp->jobNumber);
+
+				addToEnd(ready, transfer);
+				/*Update system status*/
+				updateSystem(sys, transfer, READY_QUEUE);
+			}
+			temp = temp->next;
+		}
+	}
 }
 
 void updateSystem(Node *sys, Node *update, string status) {

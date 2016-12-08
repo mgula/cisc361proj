@@ -50,21 +50,6 @@ void traverseAndPrint(Node *list) {
 	}
 }
 
-void testPrint(Node *list) {
-	Node *temp = list;
-	if (temp->next == NULL) {
-		cout << "This Queue is empty." << endl;
-	} else {
-		while (temp != NULL) {
-			if (temp->head == false) {
-				cout << temp->arrivalTime << " " << temp->jobNumber << " " << temp->jobMemory << " " << temp->jobDevices << " " << temp->runTime << " " << temp->jobPriority << endl;
-			}
-			temp = temp->next;
-		}
-		cout << endl;
-	}
-}
-
 void insert(Node *first, Node *second, Node *newNode) {
 	first->next = newNode;
 	newNode->next = second;
