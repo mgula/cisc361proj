@@ -4,9 +4,6 @@
  * CISC 361
  * Project 1
  *
- * only release what you request plz
- *
- * TODO: report
  */
 
 #include <iostream>
@@ -95,9 +92,9 @@ int main () {
 	}
 
 	/*Create necessary queues*/
-	Node *system = new Node;
-	system->head = true;
-	system->next = NULL;
+	Node *sys = new Node; //System is a keyword so use sys just to be safe
+	sys->head = true;
+	sys->next = NULL;
 
 	Node *submitQueue = new Node;
 	submitQueue->head = true;
@@ -139,7 +136,7 @@ int main () {
 
 		/*Process the current input, check if multiple inputs arrive at this time*/
 		if (!allInputRead && realTime >= currentInputTime && !multipleInputs) {
-			readCommand(current, system, submitQueue, waitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, completeQueue);
+			readCommand(current, sys, submitQueue, waitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, completeQueue);
 			inputNumber++;
 			if (inputNumber >= numberOfInputs - 1) {
 				allInputRead = true;
@@ -155,7 +152,7 @@ int main () {
 
 		/*Handle other inputs if multiple*/
 		if (multipleInputs) {
-			readCommand(queue[inputNumber], system, submitQueue, waitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, completeQueue);
+			readCommand(queue[inputNumber], sys, submitQueue, waitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, completeQueue);
 			inputNumber++;
 			if (inputNumber >= numberOfInputs - 1) {
 				allInputRead = true;
@@ -174,23 +171,23 @@ int main () {
 		}
 
 		/*Perform submit queue maintenance*/
-		submitQueueMaintenance(system, submitQueue, holdQueue1, holdQueue2);
+		submitQueueMaintenance(sys, submitQueue, holdQueue1, holdQueue2);
 
 		/*Perform wait queue maintenance*/
-		waitQueueMaintenance(system, waitQueue, readyQueue);
+		waitQueueMaintenance(sys, waitQueue, readyQueue);
 
 		/*Perform hold queue 1 maintenance*/
-		holdQueue1Maintenance(system, holdQueue1, readyQueue);
+		holdQueue1Maintenance(sys, holdQueue1, readyQueue);
 
 		/*Perform hold queue 2 maintenance*/
-		holdQueue2Maintenance(system, holdQueue2, readyQueue);
+		holdQueue2Maintenance(sys, holdQueue2, readyQueue);
 
 		/*Perform ready queue maintenance*/
-		readyQueueMaintenance(system, readyQueue, runningQueue);
+		readyQueueMaintenance(sys, readyQueue, runningQueue);
 
 		/*Perform running queue maintenance*/
 		if (!multipleInputs) {
-			runningQueueMaintenance(system, waitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, completeQueue);
+			runningQueueMaintenance(sys, waitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, completeQueue);
 		}
 
 		/*Handle time slice switch*/
@@ -203,8 +200,8 @@ int main () {
 				addToEnd(runningQueue, secondTransfer);
 
 				/*Update system status*/
-				updateSystem(system, firstTransfer, READY_QUEUE);
-				updateSystem(system, secondTransfer, RUNNING);
+				updateSystem(sys, firstTransfer, READY_QUEUE);
+				updateSystem(sys, secondTransfer, RUNNING);
 			}
 		}
 
@@ -221,7 +218,7 @@ int main () {
 
 	/*Final system display*/
 	cout << "Final system status: " << endl;
-	printSystem(system);
+	printSystem(sys);
 	cout << endl << "Submit Queue contents: " << endl;
 	traverseAndPrint(submitQueue);
 	cout << endl << "Hold Queue 1 contents: " << endl;
@@ -240,11 +237,12 @@ int main () {
 	traverseAndPrint(waitQueue);
 	cout << endl << "Complete Queue contents: " << endl;
 	traverseAndPrint(completeQueue);
-	cout << endl << "Average turnaround time: ";
+
+	/*Print system turnaround time and system weighted turnaround time*/
 	double i = 0;
 	double k = 0;
 	int j = 0;
-	Node *temp = system;
+	Node *temp = sys;
 	while (temp->next != NULL) {
 		i += temp->turnaroundTime;
 		k += temp->weightedTT;
@@ -254,9 +252,10 @@ int main () {
 	i += temp->turnaroundTime;
 	k += temp->weightedTT;
 	i /= j;
+	k /= j;
+	cout << endl << "Average turnaround time: ";
 	printf("%.2f", i);
 	cout << endl << "Average weighted turnaround time: ";
-	k /= j;
 	printf("%.2f", k);
 	return 1;
 }
@@ -271,7 +270,7 @@ int getCurrentInputTime(string input) {
 	int t = 0;
 	while (temp != NULL) {
 		if (i == 1) { //We know the second char cluster in temp must be the time
-			for (int j = 0; j < std::strlen(temp); j++) { //translate char to int
+			for (int j = 0; j < std::strlen(temp); j++) { //Translate char to int
 				t += pow(10, std::strlen(temp) - j - 1) * (temp[j] - '0');
 			}
 		}
@@ -472,19 +471,11 @@ void release(char *str, Node *sys, Node *run, Node *wait, Node *ready) {
 			cout << "Release exceeds amount of devices requested. " << endl << endl;
 			return;
 		}
+		cout << "Job " << j << " releases " << d << " devices." << endl << endl;
 		currentDevices += d;
 
-		Node *temp = wait;
-		while (temp->next != NULL) {
-			if (temp->maxJobDevices <= currentDevices) {
-				Node *transfer = remove(wait, temp->jobNumber);
-
-				addToEnd(ready, transfer);
-				/*Update system status*/
-				updateSystem(sys, transfer, READY_QUEUE);
-			}
-			temp = temp->next;
-		}
+		/*Check wait queue*/
+		waitQueueMaintenance(sys, wait, ready);
 	} else {
 		cout << "Job " << j << " couldn't release devices. " << endl;
 		cout << "Job " << j << "'s initial request for devices was denied. " << endl << endl;
