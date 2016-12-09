@@ -254,9 +254,9 @@ int main () {
 	i /= j;
 	k /= j;
 	cout << endl << "Average turnaround time: ";
-	printf("%.2f", i);
+	std::printf("%.2f", i);
 	cout << endl << "Average weighted turnaround time: ";
-	printf("%.2f", k);
+	std::printf("%.2f", k);
 	return 1;
 }
 

@@ -23,7 +23,7 @@ void printSystem(Node *list) {
 				cout << "Job number: " << temp->jobNumber << " | Status: ";
 				if (temp->status == "Completed") {
 					cout << temp->status << " at time " << temp->completionTime << " | Turnaround Time: " << temp->turnaroundTime << " | Weighted Turnaround Time: ";
-					printf("%.2f", temp->weightedTT);
+					std::printf("%.2f", temp->weightedTT);
 				} else {
 					cout << temp->status << " | Time Remaining: " << temp->remainingTime;
 				}
