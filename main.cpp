@@ -4,12 +4,8 @@
  * CISC 361
  * Project 1
  *
- * This program assumes there is ALWAYS a space after each integer. Problems may arise if
- * the text file contains a line that doesn't end in a space.
- *
  * only release what you request plz
  *
- * TODO: system turnaround time and weighted turnaround times
  * TODO: report
  */
 
@@ -43,6 +39,7 @@ int realTime = 0;
 int inputNumber = 0;
 bool simulating = true;
 bool allInputRead = false;
+bool multipleInputs = false;
 int currentInputTime;
 int numberOfInputs;
 
@@ -54,7 +51,7 @@ int quantum = 0;
 int quantumSlice = 0;
 
 /*Input processing*/
-void updateCurrentInputTime(string input);
+int getCurrentInputTime(string input);
 void readCommand(string input, Node *sys, Node *submit, Node *wait, Node *hold1, Node *hold2, Node *ready, Node *run, Node *complete);
 void statusDisplay(string input, Node *sys, Node *submit, Node *hold1, Node *hold2, Node *ready, Node *run, Node *wait, Node *complete);
 void configureSystem(char *str);
@@ -135,17 +132,44 @@ int main () {
 
 		string current = queue[inputNumber];
 
-		/*Update time of the current input, unless current input is a status display*/
+		/*Update time of the current input*/
 		if (!allInputRead) {
-			updateCurrentInputTime(current);
+			currentInputTime = getCurrentInputTime(current);
 		}
 
-		/*Process the current input*/
-		if (!allInputRead && realTime >= currentInputTime) {
+		/*Process the current input, check if multiple inputs arrive at this time*/
+		if (!allInputRead && realTime >= currentInputTime && !multipleInputs) {
 			readCommand(current, system, submitQueue, waitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, completeQueue);
 			inputNumber++;
 			if (inputNumber >= numberOfInputs - 1) {
 				allInputRead = true;
+			}
+
+			if (!allInputRead) {
+				int nextInputTime = getCurrentInputTime(queue[inputNumber]);
+				if (currentInputTime == nextInputTime) {
+					multipleInputs = true;
+				}
+			}
+		}
+
+		/*Handle other inputs if multiple*/
+		if (multipleInputs) {
+			readCommand(queue[inputNumber], system, submitQueue, waitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, completeQueue);
+			inputNumber++;
+			if (inputNumber >= numberOfInputs - 1) {
+				allInputRead = true;
+			}
+
+			if (!allInputRead) {
+				int nextInputTime = getCurrentInputTime(queue[inputNumber]);
+				if (currentInputTime == nextInputTime) {
+					multipleInputs = true;
+				} else {
+					multipleInputs = false;
+				}
+			} else {
+				multipleInputs = false;
 			}
 		}
 
@@ -165,25 +189,29 @@ int main () {
 		readyQueueMaintenance(system, readyQueue, runningQueue);
 
 		/*Perform running queue maintenance*/
-		runningQueueMaintenance(system, waitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, completeQueue);
+		if (!multipleInputs) {
+			runningQueueMaintenance(system, waitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, completeQueue);
+		}
 
 		/*Handle time slice switch*/
-		 if (quantumSlice == quantum) {
-			 quantumSlice = 0;
-			 if (readyQueue->next != NULL) {
-				 Node *firstTransfer = remove(runningQueue, runningQueue->next->jobNumber);
-				 addToEnd(readyQueue, firstTransfer);
-				 Node *secondTransfer = remove(readyQueue, readyQueue->next->jobNumber);
-				 addToEnd(runningQueue, secondTransfer);
+		if (quantumSlice == quantum) {
+			quantumSlice = 0;
+			if (readyQueue->next != NULL) {
+				Node *firstTransfer = remove(runningQueue, runningQueue->next->jobNumber);
+				addToEnd(readyQueue, firstTransfer);
+				Node *secondTransfer = remove(readyQueue, readyQueue->next->jobNumber);
+				addToEnd(runningQueue, secondTransfer);
 
-				 /*Update system status*/
-				 updateSystem(system, firstTransfer, READY_QUEUE);
-				 updateSystem(system, secondTransfer, RUNNING);
-			 }
-		 }
+				/*Update system status*/
+				updateSystem(system, firstTransfer, READY_QUEUE);
+				updateSystem(system, secondTransfer, RUNNING);
+			}
+		}
 
 		/*Increment real time*/
-		realTime++;
+		if (!multipleInputs) {
+			realTime++;
+		}
 
 		/*End simulation only when all input completed and CPU finished*/
 		if (runningQueue->next == NULL && allInputRead) {
@@ -234,7 +262,7 @@ int main () {
 }
 
 /*Input processing methods*/
-void updateCurrentInputTime(string input) {
+int getCurrentInputTime(string input) {
 	char parsed[input.length()];
 	std::strcpy(parsed, input.c_str()); //Convert string to char array - type out std:: just to be safe
 	char * temp;
@@ -250,7 +278,7 @@ void updateCurrentInputTime(string input) {
 		temp = std::strtok(NULL, " ");
 		i++;
 	}
-	currentInputTime = t;
+	return t;
 }
 
 void readCommand(string input, Node *sys, Node *submit, Node *wait, Node *hold1, Node *hold2, Node *ready, Node *run, Node *complete) {
@@ -485,7 +513,7 @@ void submitQueueMaintenance(Node *sys, Node *submit, Node *hold1, Node *hold2) {
 						/*Update system status*/
 						updateSystem(sys, transfer, HOLD_QUEUE_1);
 					} else if (transfer->jobPriority == 2) {
-						addToEnd(hold2, transfer);
+						addToFront(hold2, transfer);
 
 						/*Update system status*/
 						updateSystem(sys, transfer, HOLD_QUEUE_2);
@@ -519,7 +547,7 @@ void holdQueue1Maintenance(Node *sys, Node *hold1, Node *ready) {
 	if (hold1->next != NULL) {
 		Node *temp = hold1;
 		int shortestJob = 0;
-		int shortestJobTime = LONG_TIME;
+		int shortestJobTime = LONG_TIME; //Choose a long time to compare against
 		/*Get job number of shortest job*/
 		while (temp != NULL) {
 			if (temp->head == false) {
@@ -547,7 +575,7 @@ void holdQueue1Maintenance(Node *sys, Node *hold1, Node *ready) {
 void holdQueue2Maintenance(Node *sys, Node *hold2, Node *ready) {
 	if (hold2->next != NULL) {
 		Node *temp = hold2;
-		/*Get last node (first in)*/
+		/*Get last node (FIFO)*/
 		while (temp->next != NULL) {
 			temp = temp->next;
 		}
@@ -593,6 +621,12 @@ void runningQueueMaintenance(Node *sys, Node *wait, Node *hold1, Node *hold2, No
 			run->next->turnaroundTime = realTime - run->next->arrivalTime;
 			run->next->weightedTT = (double)run->next->turnaroundTime/(double)run->next->runTime;
 
+			currentMemory += run->next->jobMemory;
+
+			if (run->next->jobDevicesGranted) {
+				currentDevices += run->next->devicesRequested;
+			}
+
 			/*Update system status*/
 			Node *temp = sys;
 			while (temp->jobNumber != run->next->jobNumber) {
@@ -601,12 +635,6 @@ void runningQueueMaintenance(Node *sys, Node *wait, Node *hold1, Node *hold2, No
 			temp->completionTime = realTime + 1;
 			temp->turnaroundTime = run->next->turnaroundTime;
 			temp->weightedTT = run->next->weightedTT;
-
-			currentMemory += run->next->jobMemory;
-
-			if (run->jobDevicesGranted) {
-				currentDevices += run->devicesRequested;
-			}
 
 			Node *transfer = remove(run, run->next->jobNumber);
 			addToEnd(complete, transfer);

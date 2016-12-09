@@ -16,7 +16,7 @@ using namespace std;
 void printSystem(Node *list) {
 	Node *temp = list;
 	if (temp->next == NULL) {
-		cout << "This Queue is empty." << endl;
+		cout << "No jobs have arrived yet." << endl;
 	} else {
 		while (temp != NULL) {
 			if (temp->head == false) {
