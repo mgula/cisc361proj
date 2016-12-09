@@ -9,9 +9,7 @@
  *
  * only release what you request plz
  *
- * TODO: general bugginess with run (?) queue
  * TODO: system turnaround time and weighted turnaround times
- * TODO: wait queue maintenance?
  * TODO: report
  */
 
@@ -55,15 +53,16 @@ int currentDevices = 0;
 int quantum = 0;
 int quantumSlice = 0;
 
-/*Input processing methods*/
-void readCommand(string input, Node *sys, Node *submit, Node *run, Node *ready, Node *wait);
+/*Input processing*/
+void updateCurrentInputTime(string input);
+void readCommand(string input, Node *sys, Node *submit, Node *wait, Node *hold1, Node *hold2, Node *ready, Node *run, Node *complete);
 void statusDisplay(string input, Node *sys, Node *submit, Node *hold1, Node *hold2, Node *ready, Node *run, Node *wait, Node *complete);
 void configureSystem(char *str);
 void createJob(char *str, Node *sys, Node *submit);
 void makeRequest(char *str, Node *sys, Node *run, Node *ready, Node *wait);
 void release(char *str, Node *sys, Node *run, Node *wait, Node *ready);
 
-/*Queue maintenance methods*/
+/*Queue maintenance*/
 void submitQueueMaintenance(Node *sys, Node *submit, Node *hold1, Node *hold2);
 void waitQueueMaintenance(Node *sys, Node *wait, Node *ready);
 void holdQueue1Maintenance(Node *sys, Node *hold1, Node *ready);
@@ -138,35 +137,12 @@ int main () {
 
 		/*Update time of the current input, unless current input is a status display*/
 		if (!allInputRead) {
-			if (current[0] == 'D') {
-				statusDisplay(current, system, submitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, waitQueue, completeQueue);
-				inputNumber++;
-				if (inputNumber > numberOfInputs - 1) {
-					allInputRead = true;
-				}
-				continue;
-			} else if (current[0] == 'C' || current[0] == 'A' || current[0] == 'Q' || current[0] == 'L') {
-				char parsed[current.length()];
-				std::strcpy(parsed, current.c_str()); //Convert string to char array - type out std:: just to be safe
-				char * temp;
-				temp = std::strtok(parsed, " "); //Split string with space as delimiter
-				int i = 0;
-				currentInputTime = 0;
-				while (i != 2) {
-					if (i == 1) { //We know the second char cluster in temp must be the time
-						for (int j = 0; j < std::strlen(temp); j++) { //translate char to int
-							currentInputTime += pow(10, std::strlen(temp) - j - 1) * (temp[j] - '0');
-						}
-					}
-					temp = std::strtok(NULL, " ");
-					i++;
-				}
-			}
+			updateCurrentInputTime(current);
 		}
 
 		/*Process the current input*/
 		if (!allInputRead && realTime >= currentInputTime) {
-			readCommand(current, system, submitQueue, runningQueue, readyQueue, waitQueue);
+			readCommand(current, system, submitQueue, waitQueue, holdQueue1, holdQueue2, readyQueue, runningQueue, completeQueue);
 			inputNumber++;
 			if (inputNumber >= numberOfInputs - 1) {
 				allInputRead = true;
@@ -227,7 +203,11 @@ int main () {
 	cout << endl << "Ready Queue contents: " << endl;
 	traverseAndPrint(readyQueue);
 	cout << endl << "Running on the CPU: " << endl;
-	traverseAndPrint(runningQueue);
+	if (runningQueue->next != NULL) {
+		traverseAndPrint(runningQueue);
+	} else {
+		cout << "No job currently running." << endl;
+	}
 	cout << endl << "Wait Queue contents: " << endl;
 	traverseAndPrint(waitQueue);
 	cout << endl << "Complete Queue contents: " << endl;
@@ -254,7 +234,26 @@ int main () {
 }
 
 /*Input processing methods*/
-void readCommand(string input, Node *sys, Node *submit, Node *run, Node *ready, Node *wait) {
+void updateCurrentInputTime(string input) {
+	char parsed[input.length()];
+	std::strcpy(parsed, input.c_str()); //Convert string to char array - type out std:: just to be safe
+	char * temp;
+	temp = std::strtok(parsed, " "); //Split string with space as delimiter
+	int i = 0;
+	int t = 0;
+	while (temp != NULL) {
+		if (i == 1) { //We know the second char cluster in temp must be the time
+			for (int j = 0; j < std::strlen(temp); j++) { //translate char to int
+				t += pow(10, std::strlen(temp) - j - 1) * (temp[j] - '0');
+			}
+		}
+		temp = std::strtok(NULL, " ");
+		i++;
+	}
+	currentInputTime = t;
+}
+
+void readCommand(string input, Node *sys, Node *submit, Node *wait, Node *hold1, Node *hold2, Node *ready, Node *run, Node *complete) {
 	/*Convert the string to a char array and split (space as delimiter)*/
 	char parsed[input.length()];
 	std::strcpy(parsed, input.c_str());
@@ -274,6 +273,9 @@ void readCommand(string input, Node *sys, Node *submit, Node *run, Node *ready, 
 	} else if (input[0] == 'L') {
 		/*A release of devices*/
 		release(str, sys, run, wait, ready);
+	} else if (input[0] == 'D') {
+		/*Status display*/
+		statusDisplay(input, sys, submit, hold1, hold2, ready, run, wait, complete);
 	} else {
 		/*Unrecognized input*/
 	}
@@ -295,7 +297,11 @@ void statusDisplay(string input, Node *sys, Node *submit, Node *hold1, Node *hol
 	cout << endl << "Ready Queue contents: " << endl;
 	traverseAndPrint(ready);
 	cout << endl << "Running on the CPU: " << endl;
-	cout << "Job Number: " << run->next->jobNumber << endl;
+	if (run->next != NULL) {
+		cout << "Job Number: " << run->next->jobNumber << endl;
+	} else {
+		cout << "No job currently running." << endl;
+	}
 	cout << endl << "Wait Queue contents: " << endl;
 	traverseAndPrint(wait);
 	cout << endl << "Complete Queue contents: " << endl;
@@ -581,9 +587,9 @@ void runningQueueMaintenance(Node *sys, Node *wait, Node *hold1, Node *hold2, No
 		}
 		temp->remainingTime--;
 
-		if (run->next->remainingTime + 1 == 0) {
+		if (run->next->remainingTime == 0) {
 			quantumSlice = 0;
-			run->next->completionTime = realTime;
+			run->next->completionTime = realTime + 1; //Add one because real time would increment at the end of this cycle
 			run->next->turnaroundTime = realTime - run->next->arrivalTime;
 			run->next->weightedTT = (double)run->next->turnaroundTime/(double)run->next->runTime;
 
@@ -592,7 +598,7 @@ void runningQueueMaintenance(Node *sys, Node *wait, Node *hold1, Node *hold2, No
 			while (temp->jobNumber != run->next->jobNumber) {
 				temp = temp->next;
 			}
-			temp->completionTime = realTime;
+			temp->completionTime = realTime + 1;
 			temp->turnaroundTime = run->next->turnaroundTime;
 			temp->weightedTT = run->next->weightedTT;
 
@@ -612,6 +618,7 @@ void runningQueueMaintenance(Node *sys, Node *wait, Node *hold1, Node *hold2, No
 			waitQueueMaintenance(sys, wait, ready);
 			holdQueue1Maintenance(sys, hold1, ready);
 			holdQueue2Maintenance(sys, hold2, ready);
+
 			readyQueueMaintenance(sys, ready, run);
 		}
 	}
